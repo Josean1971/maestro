@@ -1,12 +1,23 @@
 import React, { useState } from "react";
 
+// Low-memory devices (1-2 GB tablets) run out of GPU memory when canvases are
+// rendered at full device pixel ratio, which kills the app on launch when it
+// is installed as a standalone PWA. Cap the ratio on weak hardware.
+const LOW_MEM = (typeof navigator !== "undefined" &&
+  ((navigator.deviceMemory && navigator.deviceMemory <= 2) ||
+   (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)));
+function pixelRatio(){
+  const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+  return LOW_MEM ? 1 : Math.min(dpr, 2);
+}
+
 function MatrixRain() {
   const canvasRef = React.useRef(null);
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    const resize = () => { const s = LOW_MEM ? 0.6 : 1; canvas.width = Math.round(window.innerWidth*s); canvas.height = Math.round(window.innerHeight*s); };
     resize();
     window.addEventListener("resize", resize);
     const chars = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ<>[]{}|=+-*&^%$#@!?";
@@ -825,7 +836,7 @@ function StarField({section,color,icon,label,onBack,onSelect}){
     const canvas=canvasRef.current;
     if(!canvas) return;
     const ctx=canvas.getContext("2d");
-    const dpr=window.devicePixelRatio||1;
+    const dpr=pixelRatio();
     let W=canvas.offsetWidth,H=canvas.offsetHeight;
     canvas.width=W*dpr; canvas.height=H*dpr; ctx.scale(dpr,dpr);
 
@@ -993,7 +1004,7 @@ function StarField({section,color,icon,label,onBack,onSelect}){
     let t=0,lastTime=performance.now(),lastFrame=0;
     const loop=(now)=>{
       rafRef.current=requestAnimationFrame(loop);
-      if(now-lastFrame<33) return;
+      if(now-lastFrame<(LOW_MEM?50:33)) return;
       lastFrame=now;
       const dt=Math.min((now-lastTime)/1000,0.06);
       lastTime=now; t+=dt;
@@ -1048,7 +1059,7 @@ function StarField({section,color,icon,label,onBack,onSelect}){
     const pos=(e)=>{const rc=canvas.getBoundingClientRect();const tc=e.touches?.[0];return tc?[tc.clientX-rc.left,tc.clientY-rc.top]:[e.clientX-rc.left,e.clientY-rc.top];};
     const onMove=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.stars.forEach(s=>{s.hovered=false;const dx=mx-s.x,dy=my-s.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<s.size*1.6&&s.z>-0.3&&d<bd){bd=d;best=s;}});if(best)best.hovered=true;};
     const onTap=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.stars.forEach(s=>{const dx=mx-s.x,dy=my-s.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<s.size*1.8&&s.z>-0.3&&d<bd){bd=d;best=s;}});if(best)onSelect({...best.cat,sectionColor:color});};
-    const resize=()=>{const d=window.devicePixelRatio||1;W=canvas.offsetWidth;H=canvas.offsetHeight;canvas.width=W*d;canvas.height=H*d;ctx.setTransform(1,0,0,1,0,0);ctx.scale(d,d);};
+    const resize=()=>{const d=pixelRatio();W=canvas.offsetWidth;H=canvas.offsetHeight;canvas.width=W*d;canvas.height=H*d;ctx.setTransform(1,0,0,1,0,0);ctx.scale(d,d);};
     window.addEventListener("resize",resize);
     canvas.addEventListener("mousemove",onMove);
     canvas.addEventListener("touchmove",onMove,{passive:true});
@@ -1087,7 +1098,7 @@ function OrbitalHome({onSelect}){
     if(!canvas) return;
     const ctx=canvas.getContext("2d",{alpha:true,desynchronized:false});
     // Handle high-DPI screens for crisp rendering
-    const dpr=window.devicePixelRatio||1;
+    const dpr=pixelRatio();
     let W=canvas.offsetWidth, H=canvas.offsetHeight;
     canvas.width=W*dpr; canvas.height=H*dpr;
     ctx.scale(dpr,dpr);
@@ -1250,7 +1261,7 @@ function OrbitalHome({onSelect}){
     const loop=(now)=>{
       rafRef.current=requestAnimationFrame(loop);
       // Cap at ~30fps to leave CPU headroom for the audio scheduler
-      if(now-lastFrame<33) return;
+      if(now-lastFrame<(LOW_MEM?50:33)) return;
       lastFrame=now;
       const dt=Math.min((now-lastTime)/1000,0.06);
       lastTime=now; t+=dt;
@@ -1302,7 +1313,7 @@ function OrbitalHome({onSelect}){
     const onMove=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.orbs.forEach(o=>{o.hovered=false;const dx=mx-o.x,dy=my-o.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<o.size*1.5&&o.z>-0.3&&d<bd){bd=d;best=o;}});if(best)best.hovered=true;};
     const onTap=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.orbs.forEach(o=>{const dx=mx-o.x,dy=my-o.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<o.size*1.7&&o.z>-0.3&&d<bd){bd=d;best=o;}});if(best){setSelected(best);setSubSpheres(best.section);}};
     const resize=()=>{
-      const d=window.devicePixelRatio||1;
+      const d=pixelRatio();
       W=canvas.offsetWidth; H=canvas.offsetHeight;
       canvas.width=W*d; canvas.height=H*d;
       ctx.setTransform(1,0,0,1,0,0);
@@ -1477,7 +1488,7 @@ export default function Maestro(){
 
   return(
     <div style={{minHeight:"100vh",maxHeight:"100vh",width:"100vw",overflowX:"hidden",background:screen==="describe"?"linear-gradient(180deg,#0a1420 0%,#0d1a2a 40%,#050a12 100%)":(darkMode?"#f0f4f8":"#000"),color:darkMode?"#111":"#eee",fontFamily:"Georgia,serif",position:"relative",overflowX:"hidden"}}>
-      {screen!=="describe" && <MatrixRain/>}
+      {screen!=="describe" && !LOW_MEM && <MatrixRain/>}
       <header style={{position:"sticky",top:0,zIndex:10,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",width:"100%",boxSizing:"border-box",background:"rgba(0,10,0,0.82)",backdropFilter:"blur(14px)",borderBottom:"1px solid rgba(0,255,65,0.15)"}}>
         <button onClick={reset} style={{display:"flex",alignItems:"center",gap:10,background:"none",border:"none",cursor:"pointer",padding:0}}>
           <span style={{fontSize:26,fontFamily:"monospace",color:"#c77dff",fontWeight:"bold",textShadow:"0 0 12px #c77dff"}}>⬡</span>
