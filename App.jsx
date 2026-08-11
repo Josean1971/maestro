@@ -20,7 +20,7 @@ function MatrixRain() {
       for (let i = 0; i < cols; i++) {
         const ch = chars[Math.floor(Math.random() * chars.length)];
         const y  = drops[i] * fontSize;
-        ctx.fillStyle = "#e0f7ff"; ctx.shadowColor = "#00cfff"; ctx.shadowBlur = 8;
+        ctx.fillStyle = "#e0f7ff"; ctx.shadowColor = "#00cfff"; ctx.shadowBlur = 4;
         ctx.font = `bold ${fontSize}px monospace`; ctx.fillText(ch, i * fontSize, y);
         ctx.shadowBlur = 3; ctx.fillStyle = i%5===0 ? "#00ff41" : "#008f11";
         ctx.font = `${fontSize}px monospace`;
@@ -30,8 +30,14 @@ function MatrixRain() {
       }
       ctx.shadowBlur = 0;
     };
-    const interval = setInterval(draw, 35);
-    return () => { clearInterval(interval); window.removeEventListener("resize", resize); };
+    let rafId, lastDraw = 0;
+    const animate = (now) => {
+      // Throttle rain to ~28fps so it doesn't compete with orbital canvas
+      if (now - lastDraw > 50) { draw(); lastDraw = now; }
+      rafId = requestAnimationFrame(animate);
+    };
+    rafId = requestAnimationFrame(animate);
+    return () => { cancelAnimationFrame(rafId); window.removeEventListener("resize", resize); };
   }, []);
   return <canvas ref={canvasRef} style={{ position:"fixed", top:0, left:0, width:"100%", height:"100%", zIndex:0, opacity:0.82 }} />;
 }
@@ -44,7 +50,7 @@ function useMatrixAudio() {
   const [playing, setPlaying] = React.useState(false);
 
   const stop = React.useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (rafRef.current) clearInterval(rafRef.current);
     rafRef.current = null; stateRef.current = null;
     if (ctxRef.current) { ctxRef.current.close().catch(()=>{}); ctxRef.current = null; }
     bufsRef.current = {};
@@ -78,32 +84,33 @@ function useMatrixAudio() {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value=-18; comp.ratio.value=4; comp.attack.value=0.005; comp.release.value=0.25;
     comp.connect(ctx.destination);
-    const rvLen = Math.floor(sr*2.2);
+    const rvLen = Math.floor(sr*1.0);
     const rvBuf = ctx.createBuffer(2,rvLen,sr);
     for(let c=0;c<2;c++){const d=rvBuf.getChannelData(c);for(let i=0;i<rvLen;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/rvLen,1.8)*0.65;}
     const rv=ctx.createConvolver(); rv.buffer=rvBuf;
     const rvG=ctx.createGain(); rvG.gain.value=0.32;
     const master=ctx.createGain();
     master.gain.setValueAtTime(0,ctx.currentTime);
-    master.gain.linearRampToValueAtTime(0.65,ctx.currentTime+2);
+    master.gain.linearRampToValueAtTime(0.72,ctx.currentTime+1.5);
     rv.connect(rvG); rvG.connect(comp); master.connect(comp);
 
-    const BPM=85, BEAT=60/BPM, BAR=BEAT*4, LOOK=0.28;
+    const BPM=112, BEAT=60/BPM, BAR=BEAT*4, LOOK=1.2;
     const pb=(t,buf,vol)=>{try{const s=ctx.createBufferSource(),g=ctx.createGain();s.buffer=buf;g.gain.value=vol;s.connect(g);g.connect(comp);s.start(t);}catch(e){}};
-    const kick=(t,v=0.5)=>{try{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(130,t);o.frequency.exponentialRampToValueAtTime(48,t+0.09);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.20);o.connect(g);g.connect(comp);o.start(t);o.stop(t+0.22);pb(t,bufsRef.current.click,0.25);}catch(e){}};
-    const pad=(freq,t,dur,vol,det=0)=>{try{const o=ctx.createOscillator(),g=ctx.createGain(),lp=ctx.createBiquadFilter();o.type="sine";o.frequency.value=freq;o.detune.value=det;lp.type="lowpass";lp.frequency.value=freq*3.5;lp.Q.value=0.5;const atk=Math.min(0.10,dur*0.15);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+atk);g.gain.setValueAtTime(vol*0.78,t+dur-dur*0.28);g.gain.linearRampToValueAtTime(0,t+dur);o.connect(lp);lp.connect(g);g.connect(rv);o.start(t);o.stop(t+dur+0.15);}catch(e){}};
-    const bass=(freq,t,dur,vol)=>{try{const o=ctx.createOscillator(),g=ctx.createGain(),lp=ctx.createBiquadFilter();o.type="sine";o.frequency.value=freq;lp.type="lowpass";lp.frequency.value=320;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+0.025);g.gain.setValueAtTime(vol*0.72,t+dur*0.55);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);o.connect(lp);lp.connect(g);g.connect(master);o.start(t);o.stop(t+dur+0.05);}catch(e){}};
-    const sparkle=(freq,t,vol)=>{try{const o=ctx.createOscillator(),g=ctx.createGain();o.type="sine";o.frequency.value=freq;g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.65);o.connect(g);g.connect(rv);o.start(t);o.stop(t+0.7);}catch(e){}};
+    const kick=(t,v=0.5)=>{try{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(165,t);o.frequency.exponentialRampToValueAtTime(45,t+0.07);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.17);o.connect(g);g.connect(comp);o.start(t);o.stop(t+0.22);pb(t,bufsRef.current.click,0.25);}catch(e){}};
+    const pad=(freq,t,dur,vol,det=0)=>{try{const o=ctx.createOscillator(),g=ctx.createGain();o.type="sine";o.frequency.value=freq;o.detune.value=det;const atk=Math.min(0.10,dur*0.15);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+atk);g.gain.setValueAtTime(vol*0.78,t+dur-dur*0.28);g.gain.linearRampToValueAtTime(0,t+dur);o.connect(g);g.connect(rv);o.start(t);o.stop(t+dur+0.15);}catch(e){}};
+    const bass=(freq,t,dur,vol)=>{try{const o=ctx.createOscillator(),g=ctx.createGain();o.type="sine";o.frequency.value=freq;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+0.025);g.gain.setValueAtTime(vol*0.72,t+dur*0.55);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+0.05);}catch(e){}};
+    const sparkle=(freq,t,vol)=>{try{const o=ctx.createOscillator(),g=ctx.createGain();o.type="sine";o.frequency.value=freq;g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.34);o.connect(g);g.connect(rv);o.start(t);o.stop(t+0.38);}catch(e){}};
 
+    // Bright uplifting progression: C - G - Am - F  (repeated with variations)
     const CHORDS=[
-      {bass:55,   pads:[110,138.6,164.8,220,293.7], arps:[440,523.3,659.3]},
-      {bass:87.3, pads:[87.3,130.8,174.6,220,261.6],arps:[349.2,440,523.3]},
-      {bass:65.4, pads:[130.8,164.8,196,246.9,329.6],arps:[523.3,659.3,784]},
-      {bass:98,   pads:[98,123.5,146.8,196,293.7],  arps:[392,493.9,587.3]},
-      {bass:73.4, pads:[146.8,174.6,220,261.6,329.6],arps:[293.7,349.2,440]},
-      {bass:82.4, pads:[164.8,196,246.9,329.6,392],  arps:[329.6,392,493.9]},
-      {bass:58.3, pads:[116.5,146.8,174.6,233.1,293.7],arps:[233.1,293.7,349.2]},
-      {bass:110,  pads:[220,277.2,329.6,440,554],    arps:[440,554,659.3]},
+      {bass:65.4, pads:[130.8,164.8,196,261.6,392],  arps:[523.3,659.3,784]},   // C
+      {bass:98,   pads:[196,246.9,293.7,392,493.9],  arps:[587.3,784,987.8]},   // G
+      {bass:110,  pads:[220,261.6,329.6,440,523.3],  arps:[659.3,880,1046.5]},  // Am
+      {bass:87.3, pads:[174.6,220,261.6,349.2,440],  arps:[523.3,698.5,880]},   // F
+      {bass:65.4, pads:[130.8,164.8,196,261.6,329.6],arps:[659.3,784,1046.5]},  // C
+      {bass:82.4, pads:[164.8,207.7,246.9,329.6,415],arps:[493.9,659.3,830.6]}, // E
+      {bass:87.3, pads:[174.6,220,261.6,349.2,523.3],arps:[698.5,880,1046.5]},  // F
+      {bass:98,   pads:[196,246.9,293.7,392,587.3],  arps:[784,987.8,1174.7]},  // G
     ];
     const MELODIES=[
       [[0,220,2.2,0.18],[2.5,246.9,1.5,0.16],[4,261.6,2.0,0.18],[6.5,293.7,1.5,0.16],[8,329.6,2.5,0.20],[11,293.7,1.8,0.17],[13,261.6,2.2,0.18],[16,246.9,3.5,0.20],[20,220,2.0,0.18],[22.5,196,1.5,0.16],[24,220,2.2,0.18],[27,246.9,4.0,0.20]],
@@ -127,34 +134,129 @@ function useMatrixAudio() {
 
     const scheduleBeat=(bt,beatInBar,barNum)=>{
       const ch=CHORDS[barNum%CHORDS.length];
-      const arpPat=ARP_PATS[Math.floor(barNum/4)%ARP_PATS.length];
-      if(beatInBar===0) kick(bt,0.50);
-      if(beatInBar===2) kick(bt,0.32);
-      if(beatInBar===2) pb(bt+BEAT*0.5,bufsRef.current.snare,0.20);
-      pb(bt,bufsRef.current.hat,0.07); pb(bt+BEAT*0.5,bufsRef.current.hat,0.04);
-      [0,0.25,0.5,0.75].forEach(o=>pb(bt+o*BEAT,bufsRef.current.shaker,0.04));
-      if(beatInBar===0){ch.pads.forEach((f,i)=>pad(f,bt,BAR*0.90,(0.12-i*0.016),i%2===0?-6:6));bass(ch.bass,bt,BAR*0.86,0.42);}
-      arpPat.forEach(([bo,ai])=>{if(Math.floor(bo)===beatInBar)sparkle(ch.arps[ai],(bt+(bo-Math.floor(bo))*BEAT),0.06);});
-      if(barNum>=2){
-        const lb=(barNum-2)*4+beatInBar;
-        const phrase=MELODIES[Math.floor((barNum-2)/8)%MELODIES.length];
-        phrase.forEach(([bo,freq,dur,vol])=>{if(Math.floor(bo)===lb%32){const off=(bo-Math.floor(bo))*BEAT;pad(freq,bt+off,dur*BEAT,vol,4);if(dur>2)pad(freq*2,bt+off+0.3,dur*BEAT*0.4,vol*0.22,8);}});
+      const S16=BEAT*0.25;
+
+      // ── DRIVING DRUMS ──
+      // Four-on-the-floor kick for energy
+      kick(bt, beatInBar===0?0.62:0.44);
+      // Snare backbeat on 2 and 4
+      if(beatInBar===1||beatInBar===3) pb(bt,bufsRef.current.snare,0.26);
+      // Offbeat hats — the groove driver
+      pb(bt,bufsRef.current.hat,0.09);
+      pb(bt+BEAT*0.5,bufsRef.current.hat,0.11);
+      // Shaker fills on odd bars
+      if(barNum%2===1) pb(bt+BEAT*0.75,bufsRef.current.shaker,0.06);
+
+      // ── BOUNCY BASS — plays on 1 and offbeat of 3 ──
+      if(beatInBar===0) bass(ch.bass,bt,BEAT*0.85,0.50);
+      if(beatInBar===2) bass(ch.bass,bt,BEAT*0.55,0.40);
+      if(beatInBar===3) bass(ch.bass*1.5,bt+BEAT*0.5,BEAT*0.45,0.34);
+
+      // ── CHORD STABS on every beat — rhythmic energy ──
+      const stabDur = beatInBar%2===0 ? BEAT*0.7 : BEAT*0.45;
+      ch.pads.slice(0,3).forEach((f,i)=>
+        pad(f, bt, stabDur, (beatInBar%2===0?0.13:0.09)-i*0.02, i===1?-7:7)
+      );
+
+      // ── SPARKLING ARPEGGIO — 16th notes, very lively ──
+      for(let s=0;s<4;s++){
+        const idx=(beatInBar*4+s)%3;
+        if(s%2===0||beatInBar%2===1){
+          sparkle(ch.arps[idx], bt+s*S16, 0.055);
+        }
+      }
+
+      // ── MELODY — brighter and more frequent ──
+      if(barNum>=1){
+        const lb=(barNum-1)*4+beatInBar;
+        const phrase=MELODIES[Math.floor((barNum-1)/8)%MELODIES.length];
+        for(let i=0;i<phrase.length;i++){
+          const [bo,freq,dur,vol]=phrase[i];
+          if(Math.floor(bo)===lb%32){
+            pad(freq*2, bt+(bo-Math.floor(bo))*BEAT, Math.min(dur,1.2)*BEAT, vol*0.85, 4);
+            break;
+          }
+        }
       }
     };
 
-    const loop=()=>{
+    // Use setInterval instead of RAF — RAF gets throttled by heavy canvas
+    // rendering, which starves the audio scheduler and causes dropouts.
+    const tick=()=>{
       if(!stateRef.current||!ctxRef.current) return;
       const S=stateRef.current;
-      while(S.nextBeat<ctx.currentTime+LOOK){scheduleBeat(S.nextBeat,S.beat%4,Math.floor(S.beat/4));S.beat++;S.nextBeat+=BEAT;}
-      rafRef.current=requestAnimationFrame(loop);
+      while(S.nextBeat<ctx.currentTime+LOOK){
+        scheduleBeat(S.nextBeat,S.beat%4,Math.floor(S.beat/4));
+        S.beat++; S.nextBeat+=BEAT;
+      }
     };
-    rafRef.current=requestAnimationFrame(loop);
+    tick();
+    rafRef.current=setInterval(tick,300);
     setPlaying(true);
   },[]);
 
   React.useEffect(()=>()=>stop(),[stop]);
   return {playing,start,stop};
 }
+// ── SPEECH HOOK ──
+function useSpeech() {
+  const [listening, setListening] = React.useState(false);
+  const [speaking,  setSpeaking]  = React.useState(false);
+  const recogRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    }
+  }, []);
+
+  const startListening = React.useCallback((onResult) => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Tu navegador no soporta voz. Usa Chrome."); return; }
+    try {
+      if (recogRef.current) recogRef.current.abort();
+      const r = new SR();
+      r.lang = "es-ES"; r.continuous = false; r.interimResults = false;
+      r.onstart  = () => setListening(true);
+      r.onend    = () => setListening(false);
+      r.onerror  = (e) => { setListening(false); if(e.error==="not-allowed") alert("Activa el micrófono en ajustes."); };
+      r.onresult = (e) => { if(e.results?.[0]?.[0]) onResult(e.results[0][0].transcript); };
+      recogRef.current = r; r.start();
+    } catch(e) { setListening(false); }
+  }, []);
+
+  const stopListening = React.useCallback(() => {
+    if (recogRef.current) { try { recogRef.current.stop(); } catch(e){} }
+    setListening(false);
+  }, []);
+
+  const speak = React.useCallback((text) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const chunks = text.match(/.{1,200}/g) || [text];
+    let i = 0;
+    const next = () => {
+      if (i >= chunks.length) { setSpeaking(false); return; }
+      const utt = new SpeechSynthesisUtterance(chunks[i++]);
+      utt.lang = "es-ES"; utt.rate = 0.95;
+      const v = window.speechSynthesis.getVoices().find(v => v.lang.startsWith("es"));
+      if (v) utt.voice = v;
+      if (i === 1) setSpeaking(true);
+      utt.onend = next; utt.onerror = () => setSpeaking(false);
+      window.speechSynthesis.speak(utt);
+    };
+    next();
+  }, []);
+
+  const stopSpeaking = React.useCallback(() => {
+    window.speechSynthesis?.cancel(); setSpeaking(false);
+  }, []);
+
+  return { listening, speaking, startListening, stopListening, speak, stopSpeaking };
+}
+
+
 
 const METAL_GRADIENTS = {
   "#00b4d8":["#e0f7ff","#00b4d8","#004e6e","#00d4ff","#7ee8fa"],
@@ -350,6 +452,870 @@ const SECTIONS=[
 
 const ALL_CATS=SECTIONS.flatMap(s=>s.categories.map(c=>({...c,sectionColor:s.color,sectionLabel:s.label})));
 
+// ── COLUMN FRAME WITH FLOATING CLOUDS ──
+function ColumnFrame({color,children}){
+  const [t,setT]=React.useState(0);
+  React.useEffect(()=>{
+    let raf,last=performance.now();
+    const loop=(now)=>{
+      const dt=Math.min((now-last)/1000,0.05); last=now;
+      setT(v=>v+dt);
+      raf=requestAnimationFrame(loop);
+    };
+    raf=requestAnimationFrame(loop);
+    return()=>cancelAnimationFrame(raf);
+  },[]);
+
+  // Cloud definitions: [baseX%, baseY, scale, speed, opacity]
+  const CLOUDS=[
+    [10, 18, 1.0, 0.9,  0.16],
+    [35, 10, 1.4, 0.55, 0.12],
+    [62, 22, 0.85,1.3,  0.18],
+    [82, 12, 1.2, 0.7,  0.13],
+    [48, 28, 0.7, 1.6,  0.20],
+  ];
+
+  const Cloud=({x,y,s,op})=>(
+    <g transform={`translate(${x},${y}) scale(${s})`} opacity={op}>
+      <ellipse cx="0"  cy="0" rx="22" ry="11"/>
+      <ellipse cx="16" cy="-5" rx="16" ry="12"/>
+      <ellipse cx="-15" cy="-3" rx="14" ry="9"/>
+      <ellipse cx="5"  cy="-9" rx="12" ry="10"/>
+    </g>
+  );
+
+  return(
+    <div style={{position:"relative",width:"100%"}}>
+      {/* Top decorative band: columns + clouds */}
+      <svg viewBox="0 0 400 92" preserveAspectRatio="none"
+        style={{width:"100%",height:88,display:"block",marginBottom:-2}}>
+        <defs>
+          {/* Realistic white marble column gradient */}
+          <linearGradient id="colGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stopColor="#8a94a6" stopOpacity="0.75"/>
+            <stop offset="18%"  stopColor="#d8dee8" stopOpacity="0.92"/>
+            <stop offset="38%"  stopColor="#ffffff" stopOpacity="1"/>
+            <stop offset="58%"  stopColor="#eef1f6" stopOpacity="0.96"/>
+            <stop offset="80%"  stopColor="#b6bfcd" stopOpacity="0.85"/>
+            <stop offset="100%" stopColor="#7c8697" stopOpacity="0.7"/>
+          </linearGradient>
+          {/* Vertical marble for side columns */}
+          <linearGradient id="colGradV" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stopColor="#7c8697" stopOpacity="0.7"/>
+            <stop offset="22%"  stopColor="#dde3ec" stopOpacity="0.9"/>
+            <stop offset="45%"  stopColor="#ffffff" stopOpacity="1"/>
+            <stop offset="70%"  stopColor="#c9d1dd" stopOpacity="0.88"/>
+            <stop offset="100%" stopColor="#8a94a6" stopOpacity="0.72"/>
+          </linearGradient>
+          {/* Soft sky behind clouds */}
+          <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%"   stopColor="#dce6f2" stopOpacity="0.10"/>
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.02"/>
+          </linearGradient>
+          {/* Cloud body gradient - white with soft grey underside */}
+          <radialGradient id="cloudGrad" cx="42%" cy="32%" r="72%">
+            <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.95"/>
+            <stop offset="55%"  stopColor="#f4f7fb" stopOpacity="0.80"/>
+            <stop offset="100%" stopColor="#c4cedd" stopOpacity="0.45"/>
+          </radialGradient>
+          <filter id="cloudBlur"><feGaussianBlur stdDeviation="1.8"/></filter>
+          <filter id="cloudSoft"><feGaussianBlur stdDeviation="3.5"/></filter>
+          {/* Weathered stone texture — fractal noise for erosion */}
+          <filter id="weathered" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9 0.35" numOctaves="4" seed="7" result="noise"/>
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.6" xChannelSelector="R" yChannelSelector="G"/>
+          </filter>
+          {/* Heavier erosion for broken edges */}
+          <filter id="eroded" x="-30%" y="-30%" width="160%" height="160%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.55 0.25" numOctaves="5" seed="13" result="n"/>
+            <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/>
+          </filter>
+          {/* Grime and age stains */}
+          <filter id="grime">
+            <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" seed="21" result="t"/>
+            <feColorMatrix in="t" type="matrix"
+              values="0 0 0 0 0.35  0 0 0 0 0.33  0 0 0 0 0.30  0 0 0 0.32 0"/>
+          </filter>
+          {/* Aged marble — yellowed and stained */}
+          <linearGradient id="agedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stopColor="#6b6a63" stopOpacity="0.8"/>
+            <stop offset="20%"  stopColor="#b8b3a4" stopOpacity="0.9"/>
+            <stop offset="42%"  stopColor="#ddd8c8" stopOpacity="0.95"/>
+            <stop offset="62%"  stopColor="#c4bfae" stopOpacity="0.9"/>
+            <stop offset="85%"  stopColor="#8f8b7e" stopOpacity="0.82"/>
+            <stop offset="100%" stopColor="#5f5e57" stopOpacity="0.75"/>
+          </linearGradient>
+          <linearGradient id="agedGradV" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stopColor="#5f5e57" stopOpacity="0.78"/>
+            <stop offset="24%"  stopColor="#c0bbab" stopOpacity="0.9"/>
+            <stop offset="48%"  stopColor="#e2ddcd" stopOpacity="0.95"/>
+            <stop offset="74%"  stopColor="#a9a496" stopOpacity="0.88"/>
+            <stop offset="100%" stopColor="#6b6a63" stopOpacity="0.76"/>
+          </linearGradient>
+        </defs>
+
+        {/* Sky background */}
+        <rect x="0" y="0" width="400" height="92" fill="url(#skyGrad)"/>
+
+        {/* Back cloud layer - softer, more diffuse */}
+        <g fill="url(#cloudGrad)" filter="url(#cloudSoft)">
+          {CLOUDS.map(([bx,by,s,sp,op],i)=>{
+            const x=((bx+t*sp*2.5)%130)*400/130 - 40;
+            const y=by+3+Math.sin(t*0.4+i)*2;
+            return <Cloud key={"b"+i} x={x} y={y} s={s*1.3} op={op*0.55}/>;
+          })}
+        </g>
+        {/* Front cloud layer - crisper white */}
+        <g fill="url(#cloudGrad)" filter="url(#cloudBlur)">
+          {CLOUDS.map(([bx,by,s,sp,op],i)=>{
+            const x=((bx+t*sp*4)%130)*400/130 - 40;
+            const y=by+Math.sin(t*0.5+i)*3;
+            return <Cloud key={"f"+i} x={x} y={y} s={s} op={Math.min(1,op*3.2)}/>;
+          })}
+        </g>
+
+        {/* RUINED PEDIMENT — broken apex, missing chunks */}
+        <g filter="url(#eroded)">
+          {/* Left surviving portion */}
+          <path d="M0,42 L58,33.5 L96,26 L132,22 L150,20.5 L146,42 Z" fill="url(#agedGrad)" opacity="0.92"/>
+          {/* Right surviving portion — larger gap at apex */}
+          <path d="M243,23.5 L280,26.5 L322,32 L365,38 L400,42 L400,42 L248,42 Z" fill="url(#agedGrad)" opacity="0.9"/>
+          {/* Small isolated fragment near the centre */}
+          <path d="M172,21 L196,18.5 L206,24 L188,27 Z" fill="url(#agedGrad)" opacity="0.75"/>
+        </g>
+        {/* Tympanum — eroded recess, only partially visible */}
+        <path d="M16,40.5 L100,29 L142,25" fill="none" stroke="#6b6a63" strokeWidth="0.6" opacity="0.45"/>
+        <path d="M256,26 L340,35 L384,40.5" fill="none" stroke="#6b6a63" strokeWidth="0.6" opacity="0.42"/>
+        {/* Broken raking cornice — dashed to suggest missing sections */}
+        <path d="M0,42 L150,20.5" fill="none" stroke="#e8e2d2" strokeWidth="1.4" opacity="0.6" strokeDasharray="26 5 14 8 20"/>
+        <path d="M243,23.5 L400,42" fill="none" stroke="#e8e2d2" strokeWidth="1.4" opacity="0.55" strokeDasharray="18 6 24 4"/>
+        {/* Rubble at the base of the gap */}
+        <circle cx="196" cy="41" r="1.4" fill="#8f8b7e" opacity="0.5"/>
+        <circle cx="214" cy="40.5" r="1" fill="#a9a496" opacity="0.45"/>
+        <circle cx="228" cy="41.5" r="1.7" fill="#6b6a63" opacity="0.4"/>
+        {/* Surviving acroterion stub on the left */}
+        <path d="M2,41.5 L4.5,38 L7,41.5 Z" fill="#c4bfae" opacity="0.6"/>
+
+        {/* CORNICE — chipped and uneven */}
+        <g filter="url(#weathered)">
+          <rect x="0" y="41.5" width="400" height="2.5" fill="#ddd8c8" opacity="0.75"/>
+          <rect x="0" y="44" width="400" height="2.5" fill="url(#agedGrad)"/>
+        </g>
+        {/* Missing cornice chunks */}
+        <rect x="88" y="41.5" width="17" height="5" fill="#0a1420" opacity="0.55"/>
+        <rect x="211" y="42" width="12" height="4.5" fill="#0a1420" opacity="0.5"/>
+        <rect x="318" y="41.8" width="9" height="4.7" fill="#0a1420" opacity="0.45"/>
+        {/* Mutules — some broken off */}
+        {[25,65,145,185,265,305,385].map((mx,mi)=>(
+          <rect key={mi} x={mx-7} y="46.5" width={mi%3===0?10:14} height="1.6"
+            fill="#b8b3a4" opacity={0.35+((mi*7)%4)*0.1}/>
+        ))}
+        {/* DORIC FRIEZE — triglyphs over each column and midpoint */}
+        <rect x="0" y="48.5" width="400" height="8" fill="#5c6675" opacity="0.22"/>
+        {[45,95,145,200,255,305,355,10,390].map((tx,ti)=>{
+          const dmg=(ti*13)%5;           // pseudo-random damage per triglyph
+          const h=dmg===0?5.5:dmg===3?6.8:8;
+          return(
+            <g key={ti} filter="url(#weathered)" opacity={dmg===4?0.45:0.9}>
+              <rect x={tx-5} y="48.5" width={dmg===1?8:10} height={h} fill="url(#agedGrad)"/>
+              <line x1={tx-2.5} y1="49.2" x2={tx-2.5} y2={48.5+h-0.5} stroke="#4a4943" strokeWidth="0.9" opacity="0.65"/>
+              <line x1={tx+2.5} y1="49.2" x2={tx+2.5} y2={48.5+h-0.5} stroke="#4a4943" strokeWidth="0.9" opacity="0.6"/>
+              <line x1={tx-5}   y1="49.2" x2={tx-5}   y2={48.5+h-0.5} stroke="#5f5e57" strokeWidth="0.6" opacity="0.45"/>
+              {dmg!==0&&<rect x={tx-4} y="56.5" width={dmg===2?5:8} height="1" fill="#b8b3a4" opacity="0.45"/>}
+            </g>
+          );
+        })}
+        {/* ARCHITRAVE — plain undecorated beam (Doric) */}
+        <rect x="0" y="57.5" width="400" height="2.5" fill="url(#colGrad)"/>
+        <rect x="0" y="60" width="400" height="0.8" fill="#7c8697" opacity="0.5"/>
+
+        {/* Modern columns */}
+        {[45,145,255,355].map((cx,i)=>{
+          const dmg=i;  // 0=intact-ish, 1=chipped, 2=broken short, 3=cracked
+          const topY = dmg===2 ? 78 : 60.5;      // broken column starts lower
+          const hasCapital = dmg!==2;
+          return(
+          <g key={i}>
+            {hasCapital&&(
+            <g filter="url(#weathered)">
+              {/* Abacus — chipped corners */}
+              <path d={dmg===1
+                ? `M${cx-15},60.5 L${cx+16},60.8 L${cx+15.5},63.5 L${cx-16},63.2 Z`
+                : `M${cx-16},60.5 L${cx+16},60.5 L${cx+16},63.5 L${cx-16},63.5 Z`}
+                fill="#ddd8c8" opacity="0.85"/>
+              <rect x={cx-16} y="63.5" width="32" height="1" fill="#5f5e57" opacity="0.5"/>
+              {/* Echinus — eroded flare */}
+              <path d={`M${cx-15},64.5 Q${cx-13.5},68 ${cx-11},70 L${cx+11},70 Q${cx+13.5},68 ${cx+15},64.5 Z`}
+                fill="url(#agedGrad)"/>
+              {/* Annulets — some worn away */}
+              <rect x={cx-11} y="70.2" width="22" height="0.7" fill="#6b6a63" opacity="0.55"/>
+              {dmg!==1&&<rect x={cx-11} y="71.4" width={dmg===3?16:22} height="0.7" fill="#6b6a63" opacity="0.42"/>}
+              <rect x={cx-11} y="72.6" width={dmg===3?12:20} height="0.6" fill="#6b6a63" opacity="0.35"/>
+            </g>)}
+
+            {/* SHAFT — drums with joint lines, cracks, missing pieces */}
+            <g filter="url(#weathered)">
+              <path d={`M${cx-10.5},${topY+12.8} Q${cx-12},80 ${cx-12.5},89.5 L${cx+12.5},89.5 Q${cx+12},80 ${cx+10.5},${topY+12.8} Z`}
+                fill="url(#agedGradV)"/>
+            </g>
+
+            {/* Drum joint lines — horizontal seams between stone blocks */}
+            {[77,81.5,86].filter(y=>y>topY+13).map((jy,ji)=>(
+              <line key={ji} x1={cx-11.6} y1={jy} x2={cx+11.6} y2={jy}
+                stroke="#4a4943" strokeWidth="0.5" opacity="0.4"/>
+            ))}
+
+            {/* Flutes — worn, uneven opacity */}
+            {[-10.5,-8.2,-5.9,-3.6,-1.3,1.3,3.6,5.9,8.2,10.5].map((fx,fi)=>{
+              const btm=fx*1.19;
+              const wear=0.28+((fi*11)%5)*0.09;
+              return(
+                <g key={fi}>
+                  <line x1={cx+fx} y1={topY+13} x2={cx+btm} y2="89.5"
+                    stroke="#4a4943" strokeWidth="0.7" opacity={wear}/>
+                  <line x1={cx+fx+1.15} y1={topY+13} x2={cx+btm*1.06} y2="89.5"
+                    stroke="#e8e2d2" strokeWidth="0.8" opacity={wear*1.4}/>
+                </g>
+              );
+            })}
+
+            {/* Cracks */}
+            {dmg===3&&(
+              <path d={`M${cx-4},${topY+14} L${cx-2},${topY+22} L${cx-5},${topY+29} L${cx-3},89.5`}
+                fill="none" stroke="#3a3934" strokeWidth="0.6" opacity="0.55"/>
+            )}
+            {dmg===1&&(
+              <path d={`M${cx+6},74 L${cx+8},80 L${cx+5},84`}
+                fill="none" stroke="#3a3934" strokeWidth="0.5" opacity="0.45"/>
+            )}
+
+            {/* Chipped edge bites */}
+            {dmg===1&&<path d={`M${cx+10.8},76 L${cx+13},78 L${cx+11},81 Z`} fill="#0a1420" opacity="0.5"/>}
+            {dmg===3&&<path d={`M${cx-11.8},82 L${cx-14},84.5 L${cx-11.5},87 Z`} fill="#0a1420" opacity="0.45"/>}
+            {dmg===2&&(
+              <>
+                {/* Jagged broken top */}
+                <path d={`M${cx-10.5},${topY+12.8} L${cx-6},${topY+9} L${cx-1},${topY+13.5} L${cx+4},${topY+8} L${cx+8},${topY+12} L${cx+10.5},${topY+10.5} L${cx+10.5},${topY+14} L${cx-10.5},${topY+14} Z`}
+                  fill="url(#agedGradV)"/>
+                <path d={`M${cx-10.5},${topY+12.8} L${cx-6},${topY+9} L${cx-1},${topY+13.5} L${cx+4},${topY+8} L${cx+8},${topY+12} L${cx+10.5},${topY+10.5}`}
+                  fill="none" stroke="#3a3934" strokeWidth="0.7" opacity="0.6"/>
+              </>
+            )}
+
+            {/* Category tint */}
+            <path d={`M${cx-10.5},${topY+12.8} Q${cx-12},80 ${cx-12.5},89.5 L${cx+12.5},89.5 Q${cx+12},80 ${cx+10.5},${topY+12.8} Z`}
+              fill={color} opacity="0.05"/>
+          </g>);
+        })}</svg>
+
+      {/* Content area flanked by side columns */}
+      <div style={{position:"relative",display:"flex",alignItems:"stretch"}}>
+        {/* Left column */}
+        <svg width="26" style={{flexShrink:0,alignSelf:"stretch"}} preserveAspectRatio="none" viewBox="0 0 38 100">
+          <defs>
+            <linearGradient id="sideGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stopColor="#7c8697" stopOpacity="0.7"/>
+              <stop offset="25%"  stopColor="#e2e8f0" stopOpacity="0.92"/>
+              <stop offset="48%"  stopColor="#ffffff" stopOpacity="1"/>
+              <stop offset="72%"  stopColor="#c9d1dd" stopOpacity="0.88"/>
+              <stop offset="100%" stopColor="#8a94a6" stopOpacity="0.7"/>
+            </linearGradient>
+          </defs>
+          <g filter="url(#weathered)">
+            <rect x="1" y="0" width="36" height="100" fill="url(#agedGradV)"/>
+          </g>
+          <rect x="1" y="0" width="36" height="100" fill={color} opacity="0.05"/>
+          {/* Drum joints */}
+          <line x1="1" y1="22" x2="37" y2="22" stroke="#4a4943" strokeWidth="0.6" opacity="0.35"/>
+          <line x1="1" y1="48" x2="37" y2="48" stroke="#4a4943" strokeWidth="0.6" opacity="0.32"/>
+          <line x1="1" y1="74" x2="37" y2="74" stroke="#4a4943" strokeWidth="0.6" opacity="0.3"/>
+          {/* Worn flutes */}
+          <line x1="4"    y1="0" x2="4"    y2="100" stroke="#3a3934" strokeWidth="0.9" opacity="0.35"/>
+          <line x1="7.5"  y1="0" x2="7.5"  y2="100" stroke="#e8e2d2" strokeWidth="1.1" opacity="0.5"/>
+          <line x1="11"   y1="0" x2="11"   y2="100" stroke="#4a4943" strokeWidth="0.9" opacity="0.4"/>
+          <line x1="14.5" y1="0" x2="14.5" y2="100" stroke="#e8e2d2" strokeWidth="1" opacity="0.42"/>
+          <line x1="18"   y1="0" x2="18"   y2="100" stroke="#5f5e57" strokeWidth="0.9" opacity="0.38"/>
+          <line x1="21.5" y1="0" x2="21.5" y2="100" stroke="#ddd8c8" strokeWidth="1" opacity="0.45"/>
+          <line x1="25"   y1="0" x2="25"   y2="100" stroke="#4a4943" strokeWidth="0.9" opacity="0.35"/>
+          <line x1="28.5" y1="0" x2="28.5" y2="100" stroke="#e8e2d2" strokeWidth="0.95" opacity="0.4"/>
+          <line x1="32"   y1="0" x2="32"   y2="100" stroke="#4a4943" strokeWidth="0.9" opacity="0.33"/>
+          <line x1="35"   y1="0" x2="35"   y2="100" stroke="#3a3934" strokeWidth="0.7" opacity="0.3"/>
+          {/* Cracks and chips */}
+          <path d="M12,18 L15,32 L11,44 L14,58" fill="none" stroke="#2e2d29" strokeWidth="0.6" opacity="0.35"/>
+          <path d="M1,62 L5,65 L1,69 Z" fill="#0a1420" opacity="0.4"/>
+          <path d="M37,30 L33,33 L37,37 Z" fill="#0a1420" opacity="0.35"/>>>
+        </svg>
+
+        {/* Actual content */}
+        <div style={{flex:1,minWidth:0}}>{children}</div>
+
+        {/* Right column */}
+        <svg width="26" style={{flexShrink:0,alignSelf:"stretch"}} preserveAspectRatio="none" viewBox="0 0 38 100">
+          <rect x="1" y="0" width="36" height="100" fill="url(#sideGrad)"/>
+          <rect x="1" y="0" width="36" height="100" fill={color} opacity="0.05"/>
+          {/* Doric annulets at top */}
+          <rect x="1" y="0" width="36" height="0.8" fill="#8f9aab" opacity="0.55"/>
+          <rect x="1" y="1.4" width="36" height="0.7" fill="#8f9aab" opacity="0.45"/>
+          {/* 20 flutes — alternating groove shadow and arris highlight */}
+          <line x1="4"  y1="0" x2="4"  y2="100" stroke="#5c6675" strokeWidth="0.9" opacity="0.5"/>
+          <line x1="7.5" y1="0" x2="7.5" y2="100" stroke="#ffffff" strokeWidth="1.1" opacity="0.72"/>
+          <line x1="11" y1="0" x2="11" y2="100" stroke="#6f7a8c" strokeWidth="0.9" opacity="0.52"/>
+          <line x1="14.5" y1="0" x2="14.5" y2="100" stroke="#ffffff" strokeWidth="1" opacity="0.68"/>
+          <line x1="18" y1="0" x2="18" y2="100" stroke="#8f9aab" strokeWidth="0.9" opacity="0.5"/>
+          <line x1="21.5" y1="0" x2="21.5" y2="100" stroke="#ffffff" strokeWidth="1" opacity="0.65"/>
+          <line x1="25" y1="0" x2="25" y2="100" stroke="#7c8697" strokeWidth="0.9" opacity="0.5"/>
+          <line x1="28.5" y1="0" x2="28.5" y2="100" stroke="#ffffff" strokeWidth="0.95" opacity="0.6"/>
+          <line x1="32" y1="0" x2="32" y2="100" stroke="#6f7a8c" strokeWidth="0.9" opacity="0.48"/>
+          <line x1="35" y1="0" x2="35" y2="100" stroke="#5c6675" strokeWidth="0.7" opacity="0.42"/>>
+        </svg>
+      </div>
+
+      {/* Base platform */}
+      <svg viewBox="0 0 400 14" preserveAspectRatio="none" style={{width:"100%",height:10,display:"block",marginTop:-2}}>
+        {/* STYLOBATE — worn steps with missing chunks */}
+        <g filter="url(#weathered)">
+          <rect x="0" y="0"   width="400" height="1.2" fill="#e8e2d2" opacity="0.6"/>
+          <rect x="0" y="1.2" width="400" height="3.3" fill="url(#agedGrad)"/>
+          <rect x="0" y="4.5" width="400" height="0.8" fill="#5f5e57" opacity="0.45"/>
+          <rect x="0" y="5.3" width="400" height="3.5" fill="url(#agedGrad)" opacity="0.85"/>
+          <rect x="0" y="8.8" width="400" height="0.8" fill="#5f5e57" opacity="0.4"/>
+          <rect x="0" y="9.6" width="400" height="4.4" fill="url(#agedGrad)" opacity="0.75"/>
+        </g>
+        {/* Missing step chunks */}
+        <rect x="62" y="0" width="14" height="4.5" fill="#0a1420" opacity="0.45"/>
+        <rect x="188" y="5.3" width="10" height="3.5" fill="#0a1420" opacity="0.4"/>
+        <rect x="298" y="9.6" width="18" height="4.4" fill="#0a1420" opacity="0.35"/>
+        {/* Cracks across the platform */}
+        <path d="M120,0 L124,5 L119,9.6 L123,14" fill="none" stroke="#3a3934" strokeWidth="0.6" opacity="0.4"/>
+        <path d="M256,1 L252,6 L257,10 L253,14" fill="none" stroke="#3a3934" strokeWidth="0.5" opacity="0.35"/>
+        <rect x="0" y="0"   width="400" height="14" fill={color} opacity="0.04"/>
+      </svg>
+    </div>
+  );
+}
+
+// ── STARFIELD SUBMENU ──
+function StarField({section,color,icon,label,onBack,onSelect}){
+  const canvasRef=React.useRef(null);
+  const stateRef=React.useRef(null);
+  const rafRef=React.useRef(null);
+
+  React.useEffect(()=>{
+    const canvas=canvasRef.current;
+    if(!canvas) return;
+    const ctx=canvas.getContext("2d");
+    const dpr=window.devicePixelRatio||1;
+    let W=canvas.offsetWidth,H=canvas.offsetHeight;
+    canvas.width=W*dpr; canvas.height=H*dpr; ctx.scale(dpr,dpr);
+
+    const cats=section.categories;
+    const N=cats.length;
+
+    // 3D spherical distribution using golden angle (Fibonacci sphere)
+    const stars=cats.map((cat,i)=>{
+      const golden=Math.PI*(3-Math.sqrt(5));
+      const yNorm=N>1?1-(i/(N-1))*2:0;
+      const rAtY=Math.sqrt(Math.max(0,1-yNorm*yNorm));
+      const theta=golden*i;
+      return{
+        cat,i,
+        bx:Math.cos(theta)*rAtY, by:yNorm, bz:Math.sin(theta)*rAtY,
+        x:0,y:0,z:0,depth:1,size:0,
+        hovered:false,scale:1,
+        twinkle:Math.random()*Math.PI*2,
+        spin:Math.random()*Math.PI*2,
+      };
+    });
+    stateRef.current={stars};
+
+    // Draw a radiant 3D sun with corona and rays
+    const drawStar3D=(s,t)=>{
+      const r=s.size*s.scale;
+      if(r<1) return;
+      const alpha=Math.min(1,0.4+s.depth*0.5);
+      const puls=0.9+Math.sin(s.twinkle)*0.1;
+
+      ctx.save();
+      ctx.translate(s.x,s.y);
+
+      // ── OUTER CORONA — soft radial haze ──
+      const corona=ctx.createRadialGradient(0,0,r*0.5,0,0,r*3.4);
+      corona.addColorStop(0,   color+Math.round(90*alpha*puls).toString(16).padStart(2,"0"));
+      corona.addColorStop(0.35,color+Math.round(40*alpha).toString(16).padStart(2,"0"));
+      corona.addColorStop(1,   "transparent");
+      ctx.beginPath();ctx.arc(0,0,r*3.4,0,Math.PI*2);
+      ctx.fillStyle=corona;ctx.fill();
+
+      // ── RADIANT RAYS — long and short alternating, rotating ──
+      ctx.save();
+      ctx.rotate(s.spin+t*0.35);
+      const RAYS=16;
+      for(let i=0;i<RAYS;i++){
+        const a=(i/RAYS)*Math.PI*2;
+        const long=i%2===0;
+        const len=r*(long?2.9:1.9)*puls;
+        const w=r*(long?0.16:0.10);
+        const rg=ctx.createLinearGradient(
+          Math.cos(a)*r*0.85, Math.sin(a)*r*0.85,
+          Math.cos(a)*len,    Math.sin(a)*len
+        );
+        rg.addColorStop(0,"rgba(255,255,255,"+(0.75*alpha)+")");
+        rg.addColorStop(0.3,color+Math.round(190*alpha).toString(16).padStart(2,"0"));
+        rg.addColorStop(1,"transparent");
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a)*r*0.8 - Math.sin(a)*w, Math.sin(a)*r*0.8 + Math.cos(a)*w);
+        ctx.lineTo(Math.cos(a)*len, Math.sin(a)*len);
+        ctx.lineTo(Math.cos(a)*r*0.8 + Math.sin(a)*w, Math.sin(a)*r*0.8 - Math.cos(a)*w);
+        ctx.closePath();
+        ctx.fillStyle=rg;ctx.fill();
+      }
+      ctx.restore();
+
+      // ── COUNTER-ROTATING SECONDARY RAYS ──
+      ctx.save();
+      ctx.rotate(-s.spin-t*0.22);
+      for(let i=0;i<8;i++){
+        const a=(i/8)*Math.PI*2+0.2;
+        const len=r*2.2*puls;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a)*r*0.9,Math.sin(a)*r*0.9);
+        ctx.lineTo(Math.cos(a)*len,Math.sin(a)*len);
+        ctx.strokeStyle=color+Math.round(110*alpha).toString(16).padStart(2,"0");
+        ctx.lineWidth=Math.max(0.6,r*0.05);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // ── SOLAR DISC — 3D lit sphere ──
+      const disc=ctx.createRadialGradient(-r*0.22,-r*0.22,r*0.03,0,0,r);
+      disc.addColorStop(0,   "rgba(255,255,255,"+(0.98*alpha)+")");
+      disc.addColorStop(0.25,"rgba(255,250,220,"+(0.92*alpha)+")");
+      disc.addColorStop(0.5, color+Math.round(240*alpha).toString(16).padStart(2,"0"));
+      disc.addColorStop(0.85,color+Math.round(170*alpha).toString(16).padStart(2,"0"));
+      disc.addColorStop(1,   "rgba(0,0,0,"+(0.32*alpha)+")");
+      ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);
+      ctx.fillStyle=disc;ctx.fill();
+
+      // Surface granulation — subtle plasma texture
+      ctx.save();
+      ctx.beginPath();ctx.arc(0,0,r*0.96,0,Math.PI*2);ctx.clip();
+      for(let i=0;i<5;i++){
+        const ga=(i/5)*Math.PI*2+t*0.3;
+        const gd=r*(0.3+((i*7)%3)*0.16);
+        const gr=r*(0.18+((i*5)%3)*0.07);
+        const gg=ctx.createRadialGradient(Math.cos(ga)*gd,Math.sin(ga)*gd,0,Math.cos(ga)*gd,Math.sin(ga)*gd,gr);
+        gg.addColorStop(0,"rgba(255,255,255,"+(0.16*alpha)+")");
+        gg.addColorStop(1,"transparent");
+        ctx.beginPath();ctx.arc(Math.cos(ga)*gd,Math.sin(ga)*gd,gr,0,Math.PI*2);
+        ctx.fillStyle=gg;ctx.fill();
+      }
+      ctx.restore();
+
+      // Chromosphere rim — bright edge glow
+      ctx.beginPath();ctx.arc(0,0,r*0.99,0,Math.PI*2);
+      ctx.strokeStyle="rgba(255,255,255,"+((s.hovered?0.85:0.5)*alpha)+")";
+      ctx.lineWidth=Math.max(0.9,r*0.07);ctx.stroke();
+
+      // Core hotspot
+      const core=ctx.createRadialGradient(-r*0.12,-r*0.12,0,-r*0.12,-r*0.12,r*0.5);
+      core.addColorStop(0,"rgba(255,255,255,"+(0.9*alpha*puls)+")");
+      core.addColorStop(1,"transparent");
+      ctx.beginPath();ctx.arc(-r*0.12,-r*0.12,r*0.5,0,Math.PI*2);
+      ctx.fillStyle=core;ctx.fill();
+
+      ctx.restore();
+
+      // ── LABEL — only front-facing ──
+      if(s.depth>0.88){
+        ctx.save();
+        ctx.globalAlpha=Math.min(1,(s.depth-0.88)*3.5);
+        ctx.font="bold "+Math.max(7,(r*0.34)|0)+"px monospace";
+        ctx.fillStyle=s.hovered?"#ffffff":color;
+        ctx.shadowColor="rgba(0,0,0,0.9)";ctx.shadowBlur=5;
+        ctx.textAlign="center";ctx.textBaseline="top";
+        const words=s.cat.label.split(" ");
+        const txt=(!s.hovered&&words.length>2)
+          ? words.slice(0,2).join(" ")
+          : s.cat.label.toUpperCase();
+        ctx.fillText(txt,s.x,s.y+r*2.0);
+        ctx.restore();
+      }
+    };
+
+    // Central hub sphere (the parent category)
+    const drawHub=(cx,cy,t)=>{
+      const hs=Math.min(W,H)*0.048*(1+Math.sin(t*1.2)*0.05);
+      // Glow
+      const gl=ctx.createRadialGradient(cx,cy,0,cx,cy,hs*2.2);
+      gl.addColorStop(0,color+"33");gl.addColorStop(1,"transparent");
+      ctx.beginPath();ctx.arc(cx,cy,hs*2.2,0,Math.PI*2);
+      ctx.fillStyle=gl;ctx.fill();
+      // Rotating ring
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(t*0.35);
+      ctx.beginPath();ctx.arc(0,0,hs*1.5,0,Math.PI*2);
+      ctx.strokeStyle=color+"55";ctx.lineWidth=1.2;
+      ctx.setLineDash([5,6]);ctx.stroke();ctx.setLineDash([]);
+      ctx.restore();
+      // 3D sphere body
+      const g=ctx.createRadialGradient(cx-hs*0.35,cy-hs*0.35,hs*0.05,cx,cy,hs*1.05);
+      g.addColorStop(0,"rgba(255,255,255,0.9)");
+      g.addColorStop(0.2,color+"ee");
+      g.addColorStop(0.6,color+"bb");
+      g.addColorStop(1,"rgba(0,0,0,0.5)");
+      ctx.beginPath();ctx.arc(cx,cy,hs,0,Math.PI*2);
+      ctx.fillStyle=g;ctx.fill();
+      ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.stroke();
+      // Icon
+      ctx.font=((hs*0.8)|0)+"px sans-serif";
+      ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.fillText(icon,cx,cy);
+    };
+
+    let t=0,lastTime=performance.now(),lastFrame=0;
+    const loop=(now)=>{
+      rafRef.current=requestAnimationFrame(loop);
+      if(now-lastFrame<33) return;
+      lastFrame=now;
+      const dt=Math.min((now-lastTime)/1000,0.06);
+      lastTime=now; t+=dt;
+      ctx.clearRect(0,0,W,H);
+      const cx=W/2,cy=H/2;
+      const S=stateRef.current;
+      const R=Math.min(W,H)*0.40;
+      const FOV=3.0;
+      const rotY=t*0.64;
+      const tiltX=0.40;
+      const wob=Math.sin(t*0.8)*0.16;
+
+      S.stars.forEach(s=>{
+        const cY=Math.cos(rotY),sY=Math.sin(rotY);
+        const px=s.bx*cY - s.bz*sY;
+        const pz=s.bx*sY + s.bz*cY;
+        const py=s.by;
+        const tx=tiltX+wob;
+        const cX=Math.cos(tx),sX=Math.sin(tx);
+        const py2=py*cX - pz*sX;
+        const pz2=py*sX + pz*cX;
+        const persp=FOV/(FOV-pz2);
+        s.x=cx+px*R*persp;
+        s.y=cy+py2*R*persp*0.9;
+        s.z=pz2;
+        s.depth=persp;
+        s.size=Math.min(W,H)*0.039*Math.pow(persp,2.2);
+        s.scale+=((s.hovered?1.45:1)-s.scale)*Math.min(1,dt*9);
+        s.twinkle+=dt*2.2; s.spin+=dt*0.5;
+      });
+
+      const sorted=[...S.stars].sort((a,b)=>a.z-b.z);
+
+      // Back stars
+      sorted.filter(s=>s.z<0).forEach(s=>drawStar3D(s,t));
+      // Connection lines from hub to hovered
+      S.stars.forEach(s=>{
+        if(s.hovered){
+          const g=ctx.createLinearGradient(cx,cy,s.x,s.y);
+          g.addColorStop(0,color+"77");g.addColorStop(1,color+"22");
+          ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(s.x,s.y);
+          ctx.strokeStyle=g;ctx.lineWidth=1.2;ctx.stroke();
+        }
+      });
+      // Hub in the middle
+      drawHub(cx,cy,t);
+      // Front stars on top
+      sorted.filter(s=>s.z>=0).forEach(s=>drawStar3D(s,t));
+    };
+    rafRef.current=requestAnimationFrame(loop);
+
+    const pos=(e)=>{const rc=canvas.getBoundingClientRect();const tc=e.touches?.[0];return tc?[tc.clientX-rc.left,tc.clientY-rc.top]:[e.clientX-rc.left,e.clientY-rc.top];};
+    const onMove=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.stars.forEach(s=>{s.hovered=false;const dx=mx-s.x,dy=my-s.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<s.size*1.6&&s.z>-0.3&&d<bd){bd=d;best=s;}});if(best)best.hovered=true;};
+    const onTap=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.stars.forEach(s=>{const dx=mx-s.x,dy=my-s.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<s.size*1.8&&s.z>-0.3&&d<bd){bd=d;best=s;}});if(best)onSelect({...best.cat,sectionColor:color});};
+    const resize=()=>{const d=window.devicePixelRatio||1;W=canvas.offsetWidth;H=canvas.offsetHeight;canvas.width=W*d;canvas.height=H*d;ctx.setTransform(1,0,0,1,0,0);ctx.scale(d,d);};
+    window.addEventListener("resize",resize);
+    canvas.addEventListener("mousemove",onMove);
+    canvas.addEventListener("touchmove",onMove,{passive:true});
+    canvas.addEventListener("click",onTap);
+    canvas.addEventListener("touchend",onTap);
+    return()=>{cancelAnimationFrame(rafRef.current);window.removeEventListener("resize",resize);};
+  },[section,color,icon]);
+
+  return(
+    <div style={{position:"relative",width:"100%",height:"calc(100vh - 70px)",animation:"fadeIn 0.35s ease"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"4px 4px 0"}}>
+        <button onClick={onBack} style={{background:"rgba(0,8,20,0.8)",border:"1px solid "+color+"44",color:color,padding:"5px 12px",borderRadius:4,cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>← VOLVER</button>
+        <span style={{fontFamily:"monospace",fontSize:12,color:color,textShadow:"0 0 8px "+color,letterSpacing:"0.1em"}}>{icon} {label}</span>
+        <span style={{fontFamily:"monospace",fontSize:10,color:"#444",marginLeft:"auto"}}>// TOCA UNA ESTRELLA</span>
+      </div>
+      <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 28px)",cursor:"pointer",touchAction:"none",display:"block"}}/>
+    </div>
+  );
+}
+
+function OrbitalHome({onSelect}){
+  const canvasRef=React.useRef(null);
+  const stateRef=React.useRef(null);
+  const rafRef=React.useRef(null);
+  const [subSpheres,setSubSpheres]=React.useState(null);
+  const [selected,setSelected]=React.useState(null);
+
+  const MAIN_ORBS=SECTIONS.map((sec,i)=>({
+    label:sec.label.split("//")[1]?.trim()||sec.label,
+    color:sec.color, section:sec,
+    icon:["🏠","⚡","🚗","⚙️","💻","🌿","⚕️","🎨","📜","⚖️","⚛️","💹","🧠","📖","⚔️","🛡️"][i]||"🔵"
+  }));
+
+  React.useEffect(()=>{
+    const canvas=canvasRef.current;
+    if(!canvas) return;
+    const ctx=canvas.getContext("2d",{alpha:true,desynchronized:false});
+    // Handle high-DPI screens for crisp rendering
+    const dpr=window.devicePixelRatio||1;
+    let W=canvas.offsetWidth, H=canvas.offsetHeight;
+    canvas.width=W*dpr; canvas.height=H*dpr;
+    ctx.scale(dpr,dpr);
+    const N=MAIN_ORBS.length;
+
+    // 3D orbital setup — spherical distribution using golden angle
+    const orbs=MAIN_ORBS.map((o,i)=>{
+      const golden=Math.PI*(3-Math.sqrt(5));
+      const yNorm=1-(i/(N-1))*2;           // -1 .. 1
+      const rAtY=Math.sqrt(1-yNorm*yNorm); // ring radius at that latitude
+      const theta=golden*i;
+      return {...o,i,
+        // Base position on unit sphere
+        bx:Math.cos(theta)*rAtY, by:yNorm, bz:Math.sin(theta)*rAtY,
+        phase:theta,
+        x:0,y:0,z:0,depth:1,
+        size:0, hovered:false, scale:1,
+      };
+    });
+    stateRef.current={orbs};
+
+    // Central AI avatar — abstract geometric polyhedron
+    const drawAvatar=(cx,cy,t)=>{
+      const s=Math.min(W,H)*0.062*(1+Math.sin(t*0.8)*0.05);
+      // Outer glow
+      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,s*2.4);
+      g.addColorStop(0,"rgba(0,207,255,0.18)");
+      g.addColorStop(1,"transparent");
+      ctx.beginPath();ctx.arc(cx,cy,s*2.4,0,Math.PI*2);
+      ctx.fillStyle=g;ctx.fill();
+      // Counter-rotating rings
+      [[1.55,0.45,"rgba(0,207,255,0.32)"],[1.15,-0.75,"rgba(199,125,255,0.28)"]].forEach(([rr,sp,col],ri)=>{
+        ctx.save();ctx.translate(cx,cy);ctx.rotate(t*sp);
+        ctx.beginPath();ctx.arc(0,0,s*rr,0,Math.PI*2);
+        ctx.strokeStyle=col;ctx.lineWidth=1.5;
+        ctx.setLineDash([6,5]);ctx.stroke();ctx.setLineDash([]);
+        if(ri===0){
+          ctx.fillStyle="rgba(0,207,255,0.7)";
+          for(let i=0;i<6;i++){
+            const a=(i/6)*Math.PI*2;
+            ctx.beginPath();ctx.arc(Math.cos(a)*s*rr,Math.sin(a)*s*rr,2,0,Math.PI*2);ctx.fill();
+          }
+        }
+        ctx.restore();
+      });
+      // Central polyhedron
+      ctx.save();ctx.translate(cx,cy);
+      const rot=t*0.6;
+      const pts=Array.from({length:6},(_,i)=>{
+        const a=(i/6)*Math.PI*2+rot;
+        const r=i%2===0?s:s*0.55;
+        return[Math.cos(a)*r,Math.sin(a)*r];
+      });
+      const sg=ctx.createRadialGradient(0,0,0,0,0,s);
+      sg.addColorStop(0,"rgba(0,207,255,0.95)");
+      sg.addColorStop(0.5,"rgba(100,50,255,0.65)");
+      sg.addColorStop(1,"rgba(0,207,255,0.12)");
+      ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
+      pts.forEach(p=>ctx.lineTo(p[0],p[1]));ctx.closePath();
+      ctx.fillStyle=sg;ctx.fill();
+      ctx.strokeStyle="rgba(0,207,255,0.9)";ctx.lineWidth=1.5;ctx.stroke();
+      ctx.strokeStyle="rgba(199,125,255,"+(0.18+Math.sin(t)*0.06)+")";ctx.lineWidth=0.7;
+      for(let i=0;i<6;i+=2){
+        ctx.beginPath();ctx.moveTo(0,0);
+        ctx.lineTo(pts[i][0],pts[i][1]);
+        ctx.lineTo(pts[(i+1)%6][0],pts[(i+1)%6][1]);
+        ctx.closePath();ctx.stroke();
+      }
+      ctx.beginPath();ctx.arc(0,0,s*0.1,0,Math.PI*2);
+      ctx.fillStyle="white";ctx.fill();
+      ctx.restore();
+    };
+
+    // Draw a shaded 3D sphere with specular highlight and terminator
+    const drawSphere3D=(o,t)=>{
+      const r=o.size*o.scale;
+      if(r<1) return;
+      const lx=-0.42, ly=-0.42;  // light direction
+
+      // Ambient glow behind (stronger when closer)
+      if(o.hovered||o.depth>1.15){
+        const gl=ctx.createRadialGradient(o.x,o.y,r*0.6,o.x,o.y,r*2.4);
+        gl.addColorStop(0,o.color+(o.hovered?"55":"28"));
+        gl.addColorStop(1,"transparent");
+        ctx.beginPath();ctx.arc(o.x,o.y,r*2.4,0,Math.PI*2);
+        ctx.fillStyle=gl;ctx.fill();
+      }
+
+      // Main sphere body — offset radial gradient creates the 3D lit look
+      const g=ctx.createRadialGradient(
+        o.x+lx*r*0.55, o.y+ly*r*0.55, r*0.05,
+        o.x, o.y, r*1.05
+      );
+      g.addColorStop(0,   "rgba(255,255,255,0.92)");
+      g.addColorStop(0.18, o.color+"ee");
+      g.addColorStop(0.55, o.color+"bb");
+      g.addColorStop(0.82, o.color+"55");
+      g.addColorStop(1,   "rgba(0,0,0,0.55)");
+      ctx.beginPath();ctx.arc(o.x,o.y,r,0,Math.PI*2);
+      ctx.fillStyle=g;ctx.fill();
+
+      // Terminator shadow — dark crescent on the unlit side
+      const sh=ctx.createRadialGradient(
+        o.x-lx*r*0.75, o.y-ly*r*0.75, r*0.1,
+        o.x, o.y, r*1.1
+      );
+      sh.addColorStop(0,"rgba(0,0,0,0.42)");
+      sh.addColorStop(0.7,"rgba(0,0,0,0.08)");
+      sh.addColorStop(1,"transparent");
+      ctx.beginPath();ctx.arc(o.x,o.y,r,0,Math.PI*2);
+      ctx.fillStyle=sh;ctx.fill();
+
+      // Rim light — thin bright edge on the far side
+      ctx.beginPath();
+      ctx.arc(o.x,o.y,r*0.97,Math.PI*0.15,Math.PI*1.15);
+      ctx.strokeStyle="rgba(255,255,255,"+(0.25*o.depth)+")";
+      ctx.lineWidth=Math.max(0.8,r*0.06);ctx.stroke();
+
+      // Specular highlight — small bright spot
+      const sp=ctx.createRadialGradient(
+        o.x+lx*r*0.5, o.y+ly*r*0.5, 0,
+        o.x+lx*r*0.5, o.y+ly*r*0.5, r*0.32
+      );
+      sp.addColorStop(0,"rgba(255,255,255,0.85)");
+      sp.addColorStop(1,"transparent");
+      ctx.beginPath();
+      ctx.arc(o.x+lx*r*0.5,o.y+ly*r*0.5,r*0.32,0,Math.PI*2);
+      ctx.fillStyle=sp;ctx.fill();
+
+      // Outline
+      ctx.beginPath();ctx.arc(o.x,o.y,r,0,Math.PI*2);
+      ctx.strokeStyle=o.color+(o.hovered?"ff":"77");
+      ctx.lineWidth=o.hovered?2:1;ctx.stroke();
+
+      // Icon — scaled and faded by depth
+      ctx.save();
+      ctx.globalAlpha=Math.min(1,0.45+o.depth*0.45);
+      ctx.font=((r*0.72)|0)+"px sans-serif";
+      ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.fillText(o.icon,o.x,o.y-r*0.04);
+      ctx.restore();
+
+      // Label — only for front-facing orbs
+      if(o.depth>0.85){
+        ctx.save();
+        ctx.globalAlpha=Math.min(1,(o.depth-0.85)*3.5);
+        ctx.font="bold "+Math.max(7,(r*0.30)|0)+"px monospace";
+        ctx.fillStyle=o.hovered?"#fff":o.color;
+        ctx.shadowColor="rgba(0,0,0,0.8)";ctx.shadowBlur=4;
+        ctx.textAlign="center";ctx.textBaseline="top";
+        ctx.fillText(o.label,o.x,o.y+r+4);
+        ctx.restore();
+      }
+    };
+
+    let t=0;
+    let lastTime=performance.now();
+    let lastFrame=0;
+    const loop=(now)=>{
+      rafRef.current=requestAnimationFrame(loop);
+      // Cap at ~30fps to leave CPU headroom for the audio scheduler
+      if(now-lastFrame<33) return;
+      lastFrame=now;
+      const dt=Math.min((now-lastTime)/1000,0.06);
+      lastTime=now; t+=dt;
+
+      ctx.clearRect(0,0,W,H);
+      const cx=W/2,cy=H/2;
+      const S=stateRef.current;
+      const R=Math.min(W,H)*0.40;      // sphere radius in px
+      const FOV=3.0;                    // perspective strength
+      const rotY=t*0.56;                // horizontal rotation
+      const tiltX=0.42;                 // fixed tilt for a nicer view
+      const wob=Math.sin(t*0.70)*0.14;  // gentle wobble
+
+      S.orbs.forEach(o=>{
+        // Rotate base point around Y axis
+        const cosY=Math.cos(rotY), sinY=Math.sin(rotY);
+        let px=o.bx*cosY - o.bz*sinY;
+        let pz=o.bx*sinY + o.bz*cosY;
+        let py=o.by;
+        // Tilt around X axis (with wobble)
+        const tx=tiltX+wob;
+        const cosX=Math.cos(tx), sinX=Math.sin(tx);
+        const py2=py*cosX - pz*sinX;
+        const pz2=py*sinX + pz*cosX;
+
+        // Perspective projection
+        const persp=FOV/(FOV-pz2);
+        o.x=cx+px*R*persp;
+        o.y=cy+py2*R*persp*0.92;
+        o.z=pz2;
+        o.depth=persp;                       // ~0.7 (back) .. ~1.6 (front)
+        o.size=Math.min(W,H)*0.045*Math.pow(persp,2.2);
+        o.scale+=(((o.hovered?1.3:1))-o.scale)*Math.min(1,dt*9);
+      });
+
+      // Painter's algorithm — draw far orbs first
+      const sorted=[...S.orbs].sort((a,b)=>a.z-b.z);
+
+      // Back half
+      sorted.filter(o=>o.z<0).forEach(o=>drawSphere3D(o,t));
+      // Avatar in the middle of the sphere
+      drawAvatar(cx,cy,t);
+      // Front half on top
+      sorted.filter(o=>o.z>=0).forEach(o=>drawSphere3D(o,t));
+    };
+    rafRef.current=requestAnimationFrame(loop);
+
+    const pos=(e)=>{const r=canvas.getBoundingClientRect();const tc=e.touches?.[0];return tc?[tc.clientX-r.left,tc.clientY-r.top]:[e.clientX-r.left,e.clientY-r.top];};
+    const onMove=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.orbs.forEach(o=>{o.hovered=false;const dx=mx-o.x,dy=my-o.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<o.size*1.5&&o.z>-0.3&&d<bd){bd=d;best=o;}});if(best)best.hovered=true;};
+    const onTap=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.orbs.forEach(o=>{const dx=mx-o.x,dy=my-o.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<o.size*1.7&&o.z>-0.3&&d<bd){bd=d;best=o;}});if(best){setSelected(best);setSubSpheres(best.section);}};
+    const resize=()=>{
+      const d=window.devicePixelRatio||1;
+      W=canvas.offsetWidth; H=canvas.offsetHeight;
+      canvas.width=W*d; canvas.height=H*d;
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.scale(d,d);
+    };
+    window.addEventListener("resize",resize);
+    canvas.addEventListener("mousemove",onMove);
+    canvas.addEventListener("touchmove",onMove,{passive:true});
+    canvas.addEventListener("click",onTap);
+    canvas.addEventListener("touchend",onTap);
+    return()=>{
+      cancelAnimationFrame(rafRef.current);
+      window.removeEventListener("resize",resize);
+      canvas.removeEventListener("mousemove",onMove);
+      canvas.removeEventListener("touchmove",onMove);
+      canvas.removeEventListener("click",onTap);
+      canvas.removeEventListener("touchend",onTap);
+    };
+  },[subSpheres]);
+
+  if(subSpheres) return(
+    <StarField section={subSpheres} color={selected?.color} icon={selected?.icon}
+      label={selected?.label} onBack={()=>setSubSpheres(null)} onSelect={onSelect}/>
+  );
+
+  return(
+    <div style={{position:"relative",width:"100%",height:"calc(100vh - 70px)"}}>
+      <p style={{fontFamily:"monospace",fontSize:10,color:"#444",letterSpacing:"0.15em",textAlign:"center",paddingTop:6}}>// TOCA UNA ESFERA PARA EXPLORAR</p>
+      <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 24px)",cursor:"pointer",touchAction:"none",display:"block"}}/>
+    </div>
+  );
+}
+
 function CatCard({cat,color,onClick}){
   const [hov,setHov]=useState(false);
   const ico=ICONS[cat.id]||ICONS.otro;
@@ -378,11 +1344,50 @@ export default function Maestro(){
   const [loading,setLoading]=useState(false);
   const [completedSteps,setCompletedSteps]=useState([]);
   const [search,setSearch]=useState("");
-  const [history,setHistory]=useState([]);
+  const [history,setHistory]=useState(()=>{
+    try{const s=localStorage.getItem("maestro_history")||sessionStorage.getItem("maestro_history");return s?JSON.parse(s):[];}catch(e){return [];}
+  });
   const [viewHistory,setViewHistory]=useState(false);
   const [aiProvider,setAiProvider]=useState("claude");
   const [apiKeys,setApiKeys]=useState({claude:"",gemini:""});
   const [showKeys,setShowKeys]=useState(false);
+  const [autoSpoken,setAutoSpoken]=useState(false);
+  const [rating,setRating]=useState(null);
+  const [darkMode,setDarkMode]=useState(false);
+  const [lang,setLang]=useState("es");
+  const [level,setLevel]=useState("normal"); // "simple" | "normal" | "experto"
+  const [points,setPoints]=useState(0);
+  const { listening, speaking, startListening, stopListening, speak, stopSpeaking } = useSpeech();
+
+  // Speak the welcome question once on first interaction
+  React.useEffect(()=>{
+    if(autoSpoken) return;
+    const greet=()=>{
+      if(autoSpoken) return;
+      setAutoSpoken(true);
+      setTimeout(()=>{
+        speak("Bienvenido a Maestro. ¿Qué problema necesitas resolver? Elige una esfera de conocimiento o pulsa el micrófono para hablar.");
+      },600);
+      window.removeEventListener("pointerdown",greet);
+      window.removeEventListener("keydown",greet);
+    };
+    // Try immediately (works if browser allows), otherwise wait for first tap
+    const timer=setTimeout(()=>{
+      try{
+        if(window.speechSynthesis&&!autoSpoken){
+          setAutoSpoken(true);
+          speak("Bienvenido a Maestro. ¿Qué problema necesitas resolver? Elige una esfera de conocimiento o pulsa el micrófono para hablar.");
+        }
+      }catch(e){}
+    },900);
+    window.addEventListener("pointerdown",greet,{once:true});
+    window.addEventListener("keydown",greet,{once:true});
+    return()=>{
+      clearTimeout(timer);
+      window.removeEventListener("pointerdown",greet);
+      window.removeEventListener("keydown",greet);
+    };
+  },[autoSpoken,speak]);
   const {playing,start,stop}=useMatrixAudio();
 
   const filtered=search.trim()?ALL_CATS.filter(c=>c.label.toLowerCase().includes(search.toLowerCase())||c.sectionLabel.toLowerCase().includes(search.toLowerCase())):null;
@@ -392,7 +1397,8 @@ export default function Maestro(){
   const fetchGuide=async()=>{
     if(!problem.trim()) return;
     setLoading(true);setScreen("guide");setCompletedSteps([]);setGuide(null);
-    const sys="You are a universal expert. Respond ONLY with valid JSON. Keys: titulo, dificultad (Facil/Moderado/Dificil/Experto), tiempo, herramientas (array), pasos (array of {titulo,descripcion,consejo}), advertencia, cuando_llamar_profesional. 5-8 steps in Spanish.";
+    const lvlStr=level==="simple"?"Use very simple language for beginners, avoid technical terms, max 5 steps":level==="experto"?"Use technical professional language with advanced detail, 7-8 steps":"Use clear practical language, 5-7 steps";
+    const sys="You are a universal expert. Respond ONLY with valid JSON. Keys: titulo, dificultad (Facil/Moderado/Dificil/Experto), tiempo, herramientas (array), pasos (array of {titulo,descripcion,consejo}), advertencia, cuando_llamar_profesional. "+lvlStr+". In Spanish.";
     const usr="Categoria: "+selectedCategory.label+". Consulta: "+problem+". Solo JSON.";
     const parse=(raw)=>{let p=null;try{p=JSON.parse(raw);}catch(e){}if(!p){try{const clean=raw.replace(/^```(?:json)?/i,"").replace(/```$/,"").trim();p=JSON.parse(clean);}catch(e){}}if(!p){try{const m=raw.match(/\{[\s\S]*\}/);if(m)p=JSON.parse(m[0]);}catch(e){}}return p;};
     try{
@@ -414,7 +1420,12 @@ export default function Maestro(){
       const parsed=parse(raw);
       if(!parsed){setGuide({error:true,msg:"Error al parsear respuesta.",raw:raw.slice(0,300)});return;}
       setGuide(parsed);
-      setHistory(prev=>[{id:Date.now(),category:selectedCategory,problem,guide:parsed,date:new Date().toLocaleDateString("es-ES"),ai:aiProvider},...prev.slice(0,19)]);
+      const newEntry={id:Date.now(),category:selectedCategory,problem,guide:parsed,date:new Date().toLocaleDateString("es-ES"),ai:aiProvider};
+      setHistory(prev=>{
+        const updated=[newEntry,...prev.slice(0,19)];
+        try{localStorage.setItem("maestro_history",JSON.stringify(updated));sessionStorage.setItem("maestro_history",JSON.stringify(updated));}catch(e){}
+        return updated;
+      });
     }catch(e){setGuide({error:true,msg:e.message||"Error de red."});}
     finally{setLoading(false);}
   };
@@ -427,9 +1438,9 @@ export default function Maestro(){
   const accentColor=selectedCategory?.sectionColor||"#c77dff";
 
   return(
-    <div style={{minHeight:"100vh",background:"#000",color:"#eee",fontFamily:"Georgia,serif",position:"relative",overflowX:"hidden"}}>
-      <MatrixRain/>
-      <header style={{position:"sticky",top:0,zIndex:10,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 24px",background:"rgba(0,10,0,0.82)",backdropFilter:"blur(14px)",borderBottom:"1px solid rgba(0,255,65,0.15)"}}>
+    <div style={{minHeight:"100vh",maxHeight:"100vh",width:"100vw",overflowX:"hidden",background:screen==="describe"?"linear-gradient(180deg,#0a1420 0%,#0d1a2a 40%,#050a12 100%)":(darkMode?"#f0f4f8":"#000"),color:darkMode?"#111":"#eee",fontFamily:"Georgia,serif",position:"relative",overflowX:"hidden"}}>
+      {screen!=="describe" && <MatrixRain/>}
+      <header style={{position:"sticky",top:0,zIndex:10,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",width:"100%",boxSizing:"border-box",background:"rgba(0,10,0,0.82)",backdropFilter:"blur(14px)",borderBottom:"1px solid rgba(0,255,65,0.15)"}}>
         <button onClick={reset} style={{display:"flex",alignItems:"center",gap:10,background:"none",border:"none",cursor:"pointer",padding:0}}>
           <span style={{fontSize:26,fontFamily:"monospace",color:"#c77dff",fontWeight:"bold",textShadow:"0 0 12px #c77dff"}}>⬡</span>
           <span style={{fontSize:18,fontWeight:"bold",color:"#eee",letterSpacing:"0.12em",fontFamily:"monospace",textShadow:"0 0 8px rgba(199,125,255,0.4)"}}>MAESTRO</span>
@@ -441,6 +1452,8 @@ export default function Maestro(){
             <button onClick={()=>setAiProvider("claude")} style={{padding:"5px 10px",background:aiProvider==="claude"?"rgba(199,125,255,0.25)":"transparent",color:aiProvider==="claude"?"#c77dff":"#555",border:"none",cursor:"pointer",fontSize:11,fontFamily:"monospace",fontWeight:"bold"}}>⚡ Claude</button>
             <button onClick={()=>setAiProvider("gemini")} style={{padding:"5px 10px",background:aiProvider==="gemini"?"rgba(66,133,244,0.25)":"transparent",color:aiProvider==="gemini"?"#6ba3f5":"#555",border:"none",cursor:"pointer",fontSize:11,fontFamily:"monospace",fontWeight:"bold"}}>✦ Gemini</button>
           </div>
+          <span style={{fontFamily:"monospace",fontSize:11,color:"#00cfff",background:"rgba(0,180,255,0.1)",border:"1px solid rgba(0,180,255,0.2)",padding:"4px 8px",borderRadius:4}}>⭐{points}</span>
+          <button onClick={()=>setDarkMode(v=>!v)} style={{...btnStyle}} title="Tema">{darkMode?"🌙":"☀️"}</button>
           <button onClick={()=>setShowKeys(v=>!v)} style={{...btnStyle,fontSize:14}}>⚙️</button>
           <button onClick={()=>playing?stop():start()} style={{...btnStyle,background:playing?"rgba(0,180,255,0.12)":"rgba(0,8,20,0.8)",border:"1px solid "+(playing?"rgba(0,180,255,0.5)":"rgba(0,180,255,0.2)"),color:playing?"#00cfff":"#00aaee",boxShadow:playing?"0 0 10px rgba(0,180,255,0.3)":"none"}}>
             {playing?"◼":"▶"}
@@ -470,39 +1483,57 @@ export default function Maestro(){
           </div>
         </div>
       )}
-      <main style={{position:"relative",zIndex:1,maxWidth:840,margin:"0 auto",padding:"32px 20px 100px"}}>
+      <main style={{position:"relative",zIndex:1,maxWidth:"100%",width:"100%",margin:"0 auto",padding:"16px 12px 80px",boxSizing:"border-box"}}>
 
         {screen==="home"&&!viewHistory&&(
           <div style={{animation:"fadeIn 0.35s ease"}}>
             <p style={{fontSize:11,color:"#444",letterSpacing:"0.18em",textTransform:"uppercase",marginBottom:8,fontFamily:"monospace"}}>{"//"} SISTEMA ACTIVO · ASISTENTE TÉCNICO IA</p>
-            <h1 style={{fontSize:"clamp(28px,5.5vw,50px)",fontWeight:"bold",lineHeight:1.15,color:"#eee",margin:"0 0 20px",fontFamily:"monospace",textShadow:"0 0 30px rgba(199,125,255,0.2)"}}>¿Qué problema<br/>necesitas resolver?</h1>
-            <input style={{width:"100%",background:"rgba(0,10,0,0.8)",border:"1px solid rgba(0,255,65,0.2)",borderRadius:4,color:"#00ff41",fontSize:15,padding:"13px 18px",fontFamily:"monospace",boxSizing:"border-box",marginBottom:32}} placeholder="🔍  Busca una categoría..." value={search} onChange={e=>setSearch(e.target.value)}/>
+            <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:20}}>
+              <h1 style={{fontSize:"clamp(26px,5vw,44px)",fontWeight:"bold",lineHeight:1.15,color:"#eee",margin:0,fontFamily:"monospace",textShadow:"0 0 30px rgba(0,180,255,0.25)",flex:1}}>¿Qué problema<br/>necesitas resolver?</h1>
+              <button
+                onClick={()=>speaking?stopSpeaking():speak("¿Qué problema necesitas resolver? Elige una esfera de conocimiento o pulsa el micrófono para hablar.")}
+                title={speaking?"Detener":"Escuchar"}
+                style={{width:42,height:42,borderRadius:"50%",border:`2px solid ${speaking?"#ff6b6b":"rgba(0,180,255,0.4)"}`,background:speaking?"rgba(255,80,80,0.18)":"rgba(0,180,255,0.1)",color:speaking?"#ff6b6b":"#00cfff",fontSize:19,cursor:"pointer",flexShrink:0,marginTop:4,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {speaking?"⏹":"🔊"}
+              </button>
+            </div>
+            <div style={{position:"relative",marginBottom:24}}>
+              <input style={{width:"100%",background:"rgba(0,8,20,0.8)",border:"1px solid rgba(0,180,255,0.25)",borderRadius:4,color:"#00cfff",fontSize:15,padding:"13px 52px 13px 18px",fontFamily:"monospace",boxSizing:"border-box"}} placeholder="🔍  Busca o pulsa 🎤 para hablar..." value={search} onChange={e=>setSearch(e.target.value)}/>
+              <button
+                onClick={()=>listening?stopListening():startListening(txt=>{setSearch(txt);})}
+                title={listening?"Detener":"Buscar por voz"}
+                style={{position:"absolute",top:"50%",right:8,transform:"translateY(-50%)",width:36,height:36,borderRadius:"50%",border:`2px solid ${listening?"#ff6b6b":"rgba(0,180,255,0.45)"}`,background:listening?"rgba(255,80,80,0.22)":"rgba(0,180,255,0.12)",color:listening?"#ff6b6b":"#00cfff",fontSize:17,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",animation:listening?"pulse 1s infinite":"none"}}>
+                {listening?"⏹":"🎤"}
+              </button>
+            </div>
+            {listening&&(
+              <p style={{fontFamily:"monospace",fontSize:12,color:"#ff6b6b",textAlign:"center",marginBottom:16,animation:"fadeIn 0.2s"}}>
+                🔴 Escuchando... habla ahora
+              </p>
+            )}
             {filtered?(
               <div>
                 <p style={{fontSize:13,color:"#666",fontFamily:"monospace",marginBottom:14}}>{filtered.length} resultado(s) para "{search}"</p>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(148px,1fr))",gap:10,marginBottom:32}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,marginBottom:32}}>
                   {filtered.map(cat=><CatCard key={cat.id} cat={cat} color={cat.sectionColor} onClick={()=>handleCategory(cat)}/>)}
                 </div>
               </div>
             ):(
-              SECTIONS.map(sec=>(
-                <div key={sec.label} style={{marginBottom:36}}>
-                  <h2 style={{fontSize:11,fontWeight:"700",letterSpacing:"0.18em",marginBottom:14,fontFamily:"monospace",color:sec.color,textTransform:"uppercase",display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{opacity:0.4}}>▸</span>{sec.label}
-                    <span style={{flex:1,height:"1px",background:`linear-gradient(90deg, ${sec.color}44, transparent)`,display:"inline-block",marginLeft:8}}/>
-                  </h2>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(148px,1fr))",gap:10}}>
-                    {sec.categories.map(cat=><CatCard key={cat.id} cat={{...cat,sectionColor:sec.color}} color={sec.color} onClick={()=>handleCategory({...cat,sectionColor:sec.color})}/>)}
-                  </div>
-                </div>
-              ))
+              <OrbitalHome onSelect={handleCategory}/>
             )}
           </div>
         )}
 
         {viewHistory&&(
           <div style={{animation:"fadeIn 0.35s ease"}}>
-            <h2 style={{fontSize:22,marginBottom:24,fontFamily:"monospace"}}>📋 Historial</h2>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24,flexWrap:"wrap"}}>
+              <h2 style={{fontSize:22,fontFamily:"monospace",margin:0}}>📋 Historial</h2>
+              <div style={{display:"flex",gap:8,marginLeft:"auto",flexWrap:"wrap"}}>
+                <span style={{fontFamily:"monospace",fontSize:12,color:"#f9c74f",background:"rgba(249,199,79,0.1)",border:"1px solid rgba(249,199,79,0.2)",padding:"4px 10px",borderRadius:20}}>⭐ {points} pts</span>
+                {points>=50&&<span style={{fontFamily:"monospace",fontSize:12,color:"#c77dff",background:"rgba(199,125,255,0.1)",border:"1px solid rgba(199,125,255,0.2)",padding:"4px 10px",borderRadius:20}}>🏆 Experto</span>}
+                {history.length>=5&&<span style={{fontFamily:"monospace",fontSize:12,color:"#52b788",background:"rgba(82,183,136,0.1)",border:"1px solid rgba(82,183,136,0.2)",padding:"4px 10px",borderRadius:20}}>🔥 {history.length} guías</span>}
+              </div>
+            </div>
             {history.length===0?<p style={{color:"#555",fontFamily:"monospace"}}>Sin historial aún.</p>:(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {history.map(item=>(
@@ -519,21 +1550,26 @@ export default function Maestro(){
 
         {screen==="describe"&&(
           <div style={{animation:"fadeIn 0.35s ease"}}>
-            <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
               <div style={{width:46,height:46,filter:`drop-shadow(0 0 10px ${accentColor})`}}>
-                {selectedCategory&&ICONS[selectedCategory.id]&&<CyberIcon d={ICONS[selectedCategory.id].d} d2={ICONS[selectedCategory.id].d2} color={accentColor} size={44} gradId={`desc_${selectedCategory.id}`}/>}
+                {selectedCategory&&ICONS[selectedCategory.id]&&<CyberIcon d={ICONS[selectedCategory.id].d} d2={ICONS[selectedCategory.id].d2} color={accentColor} size={32} gradId={`desc_${selectedCategory.id}`}/>}
               </div>
               <div>
                 <p style={{fontSize:12,letterSpacing:"0.1em",textTransform:"uppercase",margin:0,fontFamily:"monospace",fontWeight:"bold",color:accentColor}}>{selectedCategory?.label}</p>
-                <h2 style={{fontSize:24,margin:"4px 0 0",fontWeight:"bold",fontFamily:"monospace"}}>Describe tu problema</h2>
+                <h2 style={{fontSize:18,margin:"2px 0 0",fontWeight:"bold",fontFamily:"monospace"}}>Describe tu problema</h2>
               </div>
             </div>
-            <div style={{background:"rgba(0,12,0,0.88)",border:`1px solid rgba(0,255,65,0.18)`,borderRadius:4,padding:24,display:"flex",flexDirection:"column",gap:16}}>
-              <textarea style={{width:"100%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(0,255,65,0.15)",borderRadius:4,color:"#00ff41",fontSize:15,padding:"14px 16px",fontFamily:"monospace",resize:"vertical",boxSizing:"border-box",lineHeight:1.6}} placeholder="Describe el problema con detalle..." value={problem} onChange={e=>setProblem(e.target.value)} rows={6}/>
+            <ColumnFrame color={accentColor}>
+            <div style={{background:"rgba(0,8,20,0.88)",border:`1px solid ${accentColor}33`,borderRadius:4,padding:14,display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{position:"relative"}}>
+                <textarea style={{width:"100%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(0,180,255,0.2)",borderRadius:4,color:"#00cfff",fontSize:15,padding:"14px 16px",fontFamily:"monospace",resize:"vertical",boxSizing:"border-box",lineHeight:1.6}} placeholder="Describe el problema... o pulsa 🎤" value={problem} onChange={e=>setProblem(e.target.value)} rows={4}/>
+                <button onClick={()=>listening?stopListening():startListening(t=>setProblem(p=>p?p+" "+t:t))} style={{position:"absolute",top:10,right:10,width:34,height:34,borderRadius:"50%",border:`2px solid ${listening?"#ff6b6b":"rgba(0,180,255,0.4)"}`,background:listening?"rgba(255,80,80,0.2)":"rgba(0,180,255,0.1)",color:listening?"#ff6b6b":"#00cfff",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{listening?"⏹":"🎤"}</button>
+              </div>
               <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,opacity:problem.trim()?1:0.4,fontFamily:"monospace"}} onClick={fetchGuide} disabled={!problem.trim()}>
                 GENERAR GUÍA PASO A PASO →
               </button>
             </div>
+            </ColumnFrame>
             <p style={{fontSize:13,color:"#555",fontFamily:"monospace",marginTop:12}}>// Cuanto más detallado seas, mejor será la guía</p>
           </div>
         )}
@@ -554,7 +1590,13 @@ export default function Maestro(){
                     {selectedCategory&&ICONS[selectedCategory.id]&&<CyberIcon d={ICONS[selectedCategory.id].d} d2={ICONS[selectedCategory.id].d2} color={accentColor} size={40} gradId={`guide_${selectedCategory.id}`}/>}
                   </div>
                   <div>
-                    <h2 style={{fontSize:21,fontWeight:"bold",margin:"0 0 10px",lineHeight:1.3,fontFamily:"monospace"}}>{guide.titulo}</h2>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                      <h2 style={{fontSize:21,fontWeight:"bold",margin:"0 0 10px",lineHeight:1.3,fontFamily:"monospace",flex:1}}>{guide.titulo}</h2>
+                      <button onClick={()=>speaking?stopSpeaking():speak(guide.pasos?.map((p,i)=>"Paso "+(i+1)+": "+p.titulo+". "+p.descripcion).join(". "))}
+                        style={{width:36,height:36,borderRadius:"50%",border:`2px solid ${speaking?"#ff6b6b":"rgba(0,180,255,0.3)"}`,background:speaking?"rgba(255,80,80,0.15)":"rgba(0,180,255,0.08)",color:speaking?"#ff6b6b":"#00cfff",fontSize:18,cursor:"pointer",flexShrink:0}}>
+                        {speaking?"⏹":"🔊"}
+                      </button>
+                    </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
                       {guide.dificultad&&<span style={{padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:"bold",fontFamily:"monospace",background:(diffColor[guide.dificultad]||"#aaa")+"28",color:diffColor[guide.dificultad]||"#aaa"}}>{guide.dificultad}</span>}
                       <span style={{fontSize:12,color:"#666",fontFamily:"monospace"}}>⏱ {guide.tiempo}</span>
@@ -613,7 +1655,15 @@ export default function Maestro(){
                     <span style={{fontSize:48}}>🎉</span>
                     <h3 style={{fontSize:22,margin:"12px 0 8px",fontFamily:"monospace"}}>¡Problema resuelto!</h3>
                     <p style={{color:"#888",margin:0,fontFamily:"monospace"}}>Has completado todos los pasos.</p>
-                    <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,marginTop:20,fontFamily:"monospace"}} onClick={reset}>RESOLVER OTRO PROBLEMA</button>
+                    <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:12}}>
+                      <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#00cfff",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}} onClick={()=>{const t=guide.titulo+(guide.pasos?.map((p,i)=>"\n"+(i+1)+". "+p.titulo+"\n"+p.descripcion)||[]).join("");navigator.clipboard?.writeText(t).then(()=>alert("¡Copiado!"));}}>📋 COPIAR</button>
+                      <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#00cfff",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}} onClick={()=>window.print()}>📄 PDF</button>
+                      <button style={{padding:"12px 18px",border:"1px solid rgba(87,204,153,0.3)",borderRadius:4,color:"#57cc99",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}}
+                        onClick={()=>{const t=encodeURIComponent("📋 Guía MAESTRO: "+guide.titulo+"\n\n"+(guide.pasos?.map((p,i)=>(i+1)+". "+p.titulo+"\n"+p.descripcion)||[]).join("\n\n"));window.open("https://wa.me/?text="+t,"_blank");}}>
+                        💬 WHATSAPP
+                      </button>
+                    </div>
+                    <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,marginTop:20,fontFamily:"monospace"}} onClick={()=>{setPoints(p=>p+10);reset();}}>RESOLVER OTRO</button>
                   </div>
                 )}
               </div>
