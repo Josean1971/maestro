@@ -1412,8 +1412,17 @@ export default function Maestro(){
         raw=data.content.map(b=>b.text||"").join("").trim();
       } else {
         if(!apiKeys.gemini){setGuide({error:true,msg:"⚠️ Añade tu API Key de Gemini pulsando ⚙️. Es gratis en aistudio.google.com"});return;}
-        const res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key="+apiKeys.gemini,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{parts:[{text:usr}]}],generationConfig:{maxOutputTokens:4000}})});
-        if(!res.ok){const e=await res.json().catch(()=>({}));setGuide({error:true,msg:"Gemini Error "+res.status+": "+JSON.stringify(e).slice(0,200)});return;}
+        // Model names change over time; try current ones in order until one works.
+        const GEMINI_MODELS=["gemini-2.5-flash","gemini-2.0-flash","gemini-flash-latest","gemini-2.5-pro"];
+        let res=null,lastErr="";
+        for(const m of GEMINI_MODELS){
+          res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+apiKeys.gemini,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{parts:[{text:usr}]}],generationConfig:{maxOutputTokens:4000}})});
+          if(res.ok) break;
+          const e=await res.json().catch(()=>({}));
+          lastErr="Gemini Error "+res.status+": "+JSON.stringify(e).slice(0,200);
+          if(res.status!==404) break;   // only a missing model is worth retrying
+        }
+        if(!res||!res.ok){setGuide({error:true,msg:lastErr||"Gemini no respondió."});return;}
         const data=await res.json();
         raw=(data&&data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text)||"";
       }
