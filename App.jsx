@@ -1349,7 +1349,16 @@ export default function Maestro(){
   });
   const [viewHistory,setViewHistory]=useState(false);
   const [aiProvider,setAiProvider]=useState("claude");
-  const [apiKeys,setApiKeys]=useState({claude:"",gemini:""});
+  // API keys persist in this browser so they only need to be entered once.
+  const [apiKeys,setApiKeys]=useState(()=>{
+    try{
+      const saved=localStorage.getItem("maestro_api_keys");
+      return saved?JSON.parse(saved):{claude:"",gemini:""};
+    }catch(e){return {claude:"",gemini:""};}
+  });
+  React.useEffect(()=>{
+    try{localStorage.setItem("maestro_api_keys",JSON.stringify(apiKeys));}catch(e){}
+  },[apiKeys]);
   const [showKeys,setShowKeys]=useState(false);
   const [autoSpoken,setAutoSpoken]=useState(false);
   const [rating,setRating]=useState(null);
@@ -1489,6 +1498,13 @@ export default function Maestro(){
               <p style={{fontSize:11,color:"#555",marginTop:4,fontFamily:"monospace"}}>aistudio.google.com (gratis)</p>
             </div>
             <button onClick={()=>setShowKeys(false)} style={{width:"100%",padding:"12px",border:"none",borderRadius:4,background:"rgba(0,180,255,0.15)",color:"#00cfff",fontFamily:"monospace",fontSize:14,cursor:"pointer",fontWeight:"bold"}}>✓ Guardar y cerrar</button>
+            <p style={{fontSize:10,color:"#4a5a6a",marginTop:10,fontFamily:"monospace",textAlign:"center",lineHeight:1.5}}>
+              🔒 Las claves se guardan solo en este dispositivo.<br/>No se envían a ningún servidor.
+            </p>
+            <button onClick={()=>{if(confirm("¿Borrar las claves guardadas en este dispositivo?")){setApiKeys({claude:"",gemini:""});}}}
+              style={{width:"100%",padding:"8px",marginTop:8,border:"1px solid rgba(255,80,80,0.25)",borderRadius:4,background:"transparent",color:"#a05050",fontFamily:"monospace",fontSize:11,cursor:"pointer"}}>
+              Borrar claves guardadas
+            </button>
           </div>
         </div>
       )}
