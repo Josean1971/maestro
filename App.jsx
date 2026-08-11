@@ -814,8 +814,10 @@ function StarField({section,color,icon,label,onBack,onSelect}){
     // 3D spherical distribution using golden angle (Fibonacci sphere)
     const stars=cats.map((cat,i)=>{
       const golden=Math.PI*(3-Math.sqrt(5));
-      const yNorm=N>1?1-(i/(N-1))*2:0;
-      const rAtY=Math.sqrt(Math.max(0,1-yNorm*yNorm));
+      // Keep away from the exact poles: points there sit on the rotation
+      // axis and would appear frozen. 0.78 caps latitude at ~±51 degrees.
+      const yNorm=(N>1?1-(i/(N-1))*2:0)*0.78;
+      const rAtY=Math.sqrt(Math.max(0.12,1-yNorm*yNorm));
       const theta=golden*i;
       return{
         cat,i,
@@ -1077,8 +1079,9 @@ function OrbitalHome({onSelect}){
     // 3D orbital setup — spherical distribution using golden angle
     const orbs=MAIN_ORBS.map((o,i)=>{
       const golden=Math.PI*(3-Math.sqrt(5));
-      const yNorm=1-(i/(N-1))*2;           // -1 .. 1
-      const rAtY=Math.sqrt(1-yNorm*yNorm); // ring radius at that latitude
+      // Avoid the exact poles, which lie on the spin axis and look static.
+      const yNorm=(1-(i/(N-1))*2)*0.78;
+      const rAtY=Math.sqrt(Math.max(0.12,1-yNorm*yNorm)); // ring radius at that latitude
       const theta=golden*i;
       return {...o,i,
         // Base position on unit sphere
