@@ -795,6 +795,27 @@ function ColumnFrame({color,children}){
 }
 
 // ── STARFIELD SUBMENU ──
+// Draws a label under an orb/star: wraps long names onto several lines and
+// nudges the text horizontally so it never spills past the canvas edges.
+function drawWrappedLabel(ctx,text,cx,topY,canvasW,maxLineW){
+  const words=String(text).toUpperCase().split(/\s+/).filter(Boolean);
+  const lines=[];
+  let line="";
+  for(const w of words){
+    const test=line?line+" "+w:w;
+    if(line&&ctx.measureText(test).width>maxLineW){lines.push(line);line=w;}
+    else line=test;
+  }
+  if(line)lines.push(line);
+  const lh=parseInt(ctx.font,10)*1.2||12;
+  lines.forEach((ln,i)=>{
+    const halfW=ctx.measureText(ln).width/2;
+    // keep the line fully on screen
+    const x=Math.max(halfW+4,Math.min(canvasW-halfW-4,cx));
+    ctx.fillText(ln,x,topY+i*lh);
+  });
+}
+
 function StarField({section,color,icon,label,onBack,onSelect}){
   const canvasRef=React.useRef(null);
   const stateRef=React.useRef(null);
@@ -935,11 +956,7 @@ function StarField({section,color,icon,label,onBack,onSelect}){
         ctx.fillStyle=s.hovered?"#ffffff":color;
         ctx.shadowColor="rgba(0,0,0,0.9)";ctx.shadowBlur=5;
         ctx.textAlign="center";ctx.textBaseline="top";
-        const words=s.cat.label.split(" ");
-        const txt=(!s.hovered&&words.length>2)
-          ? words.slice(0,2).join(" ")
-          : s.cat.label.toUpperCase();
-        ctx.fillText(txt,s.x,s.y+r*2.0);
+        drawWrappedLabel(ctx,s.cat.label,s.x,s.y+r*2.0,W,Math.max(70,r*4.5));
         ctx.restore();
       }
     };
@@ -1222,7 +1239,7 @@ function OrbitalHome({onSelect}){
         ctx.fillStyle=o.hovered?"#fff":o.color;
         ctx.shadowColor="rgba(0,0,0,0.8)";ctx.shadowBlur=4;
         ctx.textAlign="center";ctx.textBaseline="top";
-        ctx.fillText(o.label,o.x,o.y+r+4);
+        drawWrappedLabel(ctx,o.label,o.x,o.y+r+4,W,Math.max(70,r*4.5));
         ctx.restore();
       }
     };
