@@ -1,24 +1,70 @@
 {
-  "id": "/",
+  "id": "/?app=1",
   "name": "MAESTRO",
   "short_name": "MAESTRO",
   "description": "Asistente técnico universal con IA",
-  "start_url": "/",
+  "start_url": "/?app=1",
   "scope": "/",
-  "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
+  "display": "minimal-ui",
+  "display_override": [
+    "minimal-ui",
+    "browser"
+  ],
   "background_color": "#020a12",
   "theme_color": "#00cfff",
   "icons": [
-    { "src": "/icon-48.png",  "sizes": "48x48",   "type": "image/png" },
-    { "src": "/icon-72.png",  "sizes": "72x72",   "type": "image/png" },
-    { "src": "/icon-96.png",  "sizes": "96x96",   "type": "image/png" },
-    { "src": "/icon-128.png", "sizes": "128x128", "type": "image/png" },
-    { "src": "/icon-144.png", "sizes": "144x144", "type": "image/png" },
-    { "src": "/icon-152.png", "sizes": "152x152", "type": "image/png" },
-    { "src": "/icon-180.png", "sizes": "180x180", "type": "image/png" },
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icon-48.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
