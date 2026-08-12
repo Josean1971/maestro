@@ -621,330 +621,318 @@ function ColumnFrame({color,children}){
     return()=>cancelAnimationFrame(raf);
   },[]);
 
-  // Cloud definitions: [baseX%, baseY, scale, speed, opacity]
-  const CLOUDS=[
-    [10, 18, 1.0, 0.9,  0.16],
-    [35, 10, 1.4, 0.55, 0.12],
-    [62, 22, 0.85,1.3,  0.18],
-    [82, 12, 1.2, 0.7,  0.13],
-    [48, 28, 0.7, 1.6,  0.20],
-  ];
-
   const Cloud=({x,y,s,op})=>(
     <g transform={`translate(${x},${y}) scale(${s})`} opacity={op}>
-      <ellipse cx="0"  cy="0" rx="22" ry="11"/>
-      <ellipse cx="16" cy="-5" rx="16" ry="12"/>
+      <ellipse cx="0"   cy="0"  rx="22" ry="11"/>
+      <ellipse cx="16"  cy="-5" rx="16" ry="12"/>
       <ellipse cx="-15" cy="-3" rx="14" ry="9"/>
-      <ellipse cx="5"  cy="-9" rx="12" ry="10"/>
+      <ellipse cx="5"   cy="-9" rx="12" ry="10"/>
     </g>
   );
 
+  const SKY_CLOUDS=[
+    [ 8, 16, 1.5, 0.7,  0.46],[30, 44, 2.2, 0.42, 0.34],
+    [55, 26, 1.1, 1.0,  0.50],[74, 58, 1.8, 0.55, 0.32],
+    [95, 36, 1.3, 0.85, 0.40],[18, 74, 2.6, 0.30, 0.26],
+    [62, 86, 1.6, 0.62, 0.28],[42, 98, 2.0, 0.38, 0.22],
+  ];
+
+  // ---- Perspective helpers -------------------------------------------------
+  // The temple is drawn as a shallow 3D box: a front row of columns, a recessed
+  // back wall, and side rows that converge toward a vanishing point. Depth is
+  // faked by scaling toward the centre of the canvas.
+  const VP={x:200,y:96};                       // vanishing point
+  const depth=(p,k)=>({                        // k=0 front plane, k=1 far plane
+    x:p.x+(VP.x-p.x)*k,
+    y:p.y+(VP.y-p.y)*k,
+  });
+  const D=0.34;                                // how far back the rear plane sits
+
+  // Front columns, drawn largest. Middle ones are omitted so the oracle inside
+  // stays visible through the opening.
+  const FRONT=[26,74,326,374];
+  const SIDE_L=[[26,0],[52,0.16],[74,0.30]];
+  const SIDE_R=[[374,0],[348,0.16],[326,0.30]];
+
+  const Column=({cx,k,dmg})=>{
+    const s=1-k*0.62;                          // perspective shrink
+    const top=depth({x:cx,y:60},k);
+    const bot=depth({x:cx,y:214},k);
+    const w=13*s;
+    const shade=0.55+0.45*(1-k);               // rear columns sit in shadow
+    return(
+      <g opacity={shade}>
+        {/* capital */}
+        <rect x={top.x-w*1.5} y={top.y-4*s} width={w*3} height={3.4*s} fill="#e6e1d1" opacity="0.9"/>
+        <path d={`M${top.x-w*1.35},${top.y-0.6*s} Q${top.x},${top.y+3.4*s} ${top.x+w*1.35},${top.y-0.6*s} L${top.x+w},${top.y+4*s} Q${top.x},${top.y+6*s} ${top.x-w},${top.y+4*s} Z`} fill="url(#agedGrad)"/>
+        {/* annulets */}
+        <rect x={top.x-w} y={top.y+5.4*s} width={w*2} height={0.9*s} fill="#6b6a63" opacity="0.5"/>
+        {/* shaft with entasis */}
+        <path d={`M${top.x-w},${top.y+6.4*s} Q${top.x-w*1.12},${(top.y+bot.y)/2} ${bot.x-w*1.16},${bot.y} L${bot.x+w*1.16},${bot.y} Q${top.x+w*1.12},${(top.y+bot.y)/2} ${top.x+w},${top.y+6.4*s} Z`} fill="url(#agedGradV)"/>
+        {/* flutes */}
+        {[-0.78,-0.5,-0.22,0.06,0.34,0.62].map((f,i)=>(
+          <line key={i}
+            x1={top.x+f*w} y1={top.y+7*s}
+            x2={bot.x+f*w*1.16} y2={bot.y}
+            stroke={i%2?"#efe9d9":"#5f5e57"} strokeWidth={0.8*s}
+            opacity={i%2?0.5:0.42}/>
+        ))}
+        {/* drum joints */}
+        {[0.3,0.55,0.78].map((u,i)=>{
+          const y=top.y+(bot.y-top.y)*u, ww=w*(1+0.16*u);
+          return <line key={i} x1={top.x-ww} y1={y} x2={top.x+ww} y2={y} stroke="#4a4943" strokeWidth={0.5*s} opacity="0.32"/>;
+        })}
+        {/* damage */}
+        {dmg===1&&<path d={`M${top.x+w*0.9},${top.y+40*s} L${top.x+w*1.5},${top.y+48*s} L${top.x+w*0.8},${top.y+56*s} Z`} fill="#08111c" opacity="0.5"/>}
+        {dmg===2&&<path d={`M${top.x-w*1.1},${bot.y-38*s} L${top.x-w*1.7},${bot.y-30*s} L${top.x-w*1.0},${bot.y-22*s} Z`} fill="#08111c" opacity="0.45"/>}
+        {/* base */}
+        <ellipse cx={bot.x} cy={bot.y} rx={w*1.5} ry={1.8*s} fill="url(#agedGrad)"/>
+      </g>
+    );
+  };
+
+
+  // A wall torch: bracket, bowl and a flame whose silhouette is rebuilt every
+  // frame from a few sine waves so it never repeats exactly.
+  const Torch=({x,y,s,seed})=>{
+    const f=t*10.2+seed;
+    const w1=Math.sin(f)*1.5, w2=Math.sin(f*1.7+1.1)*1.1, w3=Math.sin(f*2.3+2.2)*0.8;
+    const h =1+Math.sin(f*1.3)*0.13;            // flame breathes up and down
+    const H =17*h;
+    return(
+      <g transform={`translate(${x},${y}) scale(${s})`}>
+        {/* light cast on the stone behind */}
+        <ellipse cx={0} cy={-4} rx={16+w1} ry={20+w2} fill="url(#torchGlow)"
+                 opacity={0.55+Math.sin(f*1.6)*0.16}/>
+        {/* iron bracket */}
+        <path d="M-1.6,2 L1.6,2 L1.1,7 L-1.1,7 Z" fill="#2e2a24"/>
+        <path d="M-3.4,7 Q0,10.5 3.4,7 L2.6,9.4 Q0,12.2 -2.6,9.4 Z" fill="#3b352c"/>
+        <rect x="-4.2" y="1" width="8.4" height="1.8" rx="0.6" fill="#4a4238"/>
+        {/* embers in the bowl */}
+        <ellipse cx="0" cy="1.2" rx="3.2" ry="1.1" fill="#ff7a1a" opacity={0.75+Math.sin(f*2.1)*0.2}/>
+        {/* outer flame */}
+        <path d={`M0,${-H} C${5.5+w1},${-H*0.55} ${4.6+w2},${-H*0.2} ${3.1+w3},1
+                  L${-3.1+w3},1 C${-4.6+w2},${-H*0.2} ${-5.5+w1},${-H*0.55} 0,${-H} Z`}
+              fill="url(#flameOuter)" opacity="0.92"/>
+        {/* inner flame */}
+        <path d={`M0,${-H*0.72} C${3.2+w2},${-H*0.4} ${2.7+w3},${-H*0.12} ${1.9},1
+                  L${-1.9},1 C${-2.7+w3},${-H*0.12} ${-3.2+w2},${-H*0.4} 0,${-H*0.72} Z`}
+              fill="url(#flameInner)" opacity="0.95"/>
+        {/* white core */}
+        <ellipse cx={w3*0.5} cy={-H*0.22} rx={1.15} ry={H*0.2} fill="#fff6d8"
+                 opacity={0.8+Math.sin(f*2.6)*0.15}/>
+        {/* a spark rising now and then */}
+        <circle cx={w1*1.6} cy={-H-3-((f*7)%9)} r="0.5" fill="#ffb347"
+                opacity={Math.max(0,0.7-((f*7)%9)/9)}/>
+      </g>
+    );
+  };
+
   return(
     <div style={{position:"relative",width:"100%"}}>
-      {/* Top decorative band: columns + clouds */}
-      <svg viewBox="0 0 400 92" preserveAspectRatio="none"
-        style={{width:"100%",height:88,display:"block",marginBottom:-2}}>
-        <defs>
-          {/* Realistic white marble column gradient */}
-          <linearGradient id="colGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor="#8a94a6" stopOpacity="0.75"/>
-            <stop offset="18%"  stopColor="#d8dee8" stopOpacity="0.92"/>
-            <stop offset="38%"  stopColor="#ffffff" stopOpacity="1"/>
-            <stop offset="58%"  stopColor="#eef1f6" stopOpacity="0.96"/>
-            <stop offset="80%"  stopColor="#b6bfcd" stopOpacity="0.85"/>
-            <stop offset="100%" stopColor="#7c8697" stopOpacity="0.7"/>
-          </linearGradient>
-          {/* Vertical marble for side columns */}
-          <linearGradient id="colGradV" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor="#7c8697" stopOpacity="0.7"/>
-            <stop offset="22%"  stopColor="#dde3ec" stopOpacity="0.9"/>
-            <stop offset="45%"  stopColor="#ffffff" stopOpacity="1"/>
-            <stop offset="70%"  stopColor="#c9d1dd" stopOpacity="0.88"/>
-            <stop offset="100%" stopColor="#8a94a6" stopOpacity="0.72"/>
-          </linearGradient>
-          {/* Soft sky behind clouds */}
-          <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%"   stopColor="#dce6f2" stopOpacity="0.10"/>
-            <stop offset="100%" stopColor="#ffffff" stopOpacity="0.02"/>
-          </linearGradient>
-          {/* Cloud body gradient - white with soft grey underside */}
-          <radialGradient id="cloudGrad" cx="42%" cy="32%" r="72%">
-            <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.95"/>
-            <stop offset="55%"  stopColor="#f4f7fb" stopOpacity="0.80"/>
-            <stop offset="100%" stopColor="#c4cedd" stopOpacity="0.45"/>
-          </radialGradient>
-          <filter id="cloudBlur"><feGaussianBlur stdDeviation="1.8"/></filter>
-          <filter id="cloudSoft"><feGaussianBlur stdDeviation="3.5"/></filter>
-          {/* Weathered stone texture — fractal noise for erosion */}
-          <filter id="weathered" x="-20%" y="-20%" width="140%" height="140%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.9 0.35" numOctaves="4" seed="7" result="noise"/>
-            <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.6" xChannelSelector="R" yChannelSelector="G"/>
-          </filter>
-          {/* Heavier erosion for broken edges */}
-          <filter id="eroded" x="-30%" y="-30%" width="160%" height="160%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.55 0.25" numOctaves="5" seed="13" result="n"/>
-            <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" xChannelSelector="R" yChannelSelector="G"/>
-          </filter>
-          {/* Grime and age stains */}
-          <filter id="grime">
-            <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" seed="21" result="t"/>
-            <feColorMatrix in="t" type="matrix"
-              values="0 0 0 0 0.35  0 0 0 0 0.33  0 0 0 0 0.30  0 0 0 0.32 0"/>
-          </filter>
-          {/* Aged marble — yellowed and stained */}
-          <linearGradient id="agedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor="#6b6a63" stopOpacity="0.8"/>
-            <stop offset="20%"  stopColor="#b8b3a4" stopOpacity="0.9"/>
-            <stop offset="42%"  stopColor="#ddd8c8" stopOpacity="0.95"/>
-            <stop offset="62%"  stopColor="#c4bfae" stopOpacity="0.9"/>
-            <stop offset="85%"  stopColor="#8f8b7e" stopOpacity="0.82"/>
-            <stop offset="100%" stopColor="#5f5e57" stopOpacity="0.75"/>
-          </linearGradient>
-          <linearGradient id="agedGradV" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor="#5f5e57" stopOpacity="0.78"/>
-            <stop offset="24%"  stopColor="#c0bbab" stopOpacity="0.9"/>
-            <stop offset="48%"  stopColor="#e2ddcd" stopOpacity="0.95"/>
-            <stop offset="74%"  stopColor="#a9a496" stopOpacity="0.88"/>
-            <stop offset="100%" stopColor="#6b6a63" stopOpacity="0.76"/>
-          </linearGradient>
-        </defs>
-
-        {/* Sky background */}
-        <rect x="0" y="0" width="400" height="92" fill="url(#skyGrad)"/>
-
-        {/* Back cloud layer - softer, more diffuse */}
-        <g fill="url(#cloudGrad)" filter="url(#cloudSoft)">
-          {CLOUDS.map(([bx,by,s,sp,op],i)=>{
-            const x=((bx+t*sp*2.5)%130)*400/130 - 40;
-            const y=by+3+Math.sin(t*0.4+i)*2;
-            return <Cloud key={"b"+i} x={x} y={y} s={s*1.3} op={op*0.55}/>;
-          })}
-        </g>
-        {/* Front cloud layer - crisper white */}
-        <g fill="url(#cloudGrad)" filter="url(#cloudBlur)">
-          {CLOUDS.map(([bx,by,s,sp,op],i)=>{
-            const x=((bx+t*sp*4)%130)*400/130 - 40;
-            const y=by+Math.sin(t*0.5+i)*3;
-            return <Cloud key={"f"+i} x={x} y={y} s={s} op={Math.min(1,op*3.2)}/>;
-          })}
-        </g>
-
-        {/* RUINED PEDIMENT — broken apex, missing chunks */}
-        <g filter="url(#eroded)">
-          {/* Left surviving portion */}
-          <path d="M0,42 L58,33.5 L96,26 L132,22 L150,20.5 L146,42 Z" fill="url(#agedGrad)" opacity="0.92"/>
-          {/* Right surviving portion — larger gap at apex */}
-          <path d="M243,23.5 L280,26.5 L322,32 L365,38 L400,42 L400,42 L248,42 Z" fill="url(#agedGrad)" opacity="0.9"/>
-          {/* Small isolated fragment near the centre */}
-          <path d="M172,21 L196,18.5 L206,24 L188,27 Z" fill="url(#agedGrad)" opacity="0.75"/>
-        </g>
-        {/* Tympanum — eroded recess, only partially visible */}
-        <path d="M16,40.5 L100,29 L142,25" fill="none" stroke="#6b6a63" strokeWidth="0.6" opacity="0.45"/>
-        <path d="M256,26 L340,35 L384,40.5" fill="none" stroke="#6b6a63" strokeWidth="0.6" opacity="0.42"/>
-        {/* Broken raking cornice — dashed to suggest missing sections */}
-        <path d="M0,42 L150,20.5" fill="none" stroke="#e8e2d2" strokeWidth="1.4" opacity="0.6" strokeDasharray="26 5 14 8 20"/>
-        <path d="M243,23.5 L400,42" fill="none" stroke="#e8e2d2" strokeWidth="1.4" opacity="0.55" strokeDasharray="18 6 24 4"/>
-        {/* Rubble at the base of the gap */}
-        <circle cx="196" cy="41" r="1.4" fill="#8f8b7e" opacity="0.5"/>
-        <circle cx="214" cy="40.5" r="1" fill="#a9a496" opacity="0.45"/>
-        <circle cx="228" cy="41.5" r="1.7" fill="#6b6a63" opacity="0.4"/>
-        {/* Surviving acroterion stub on the left */}
-        <path d="M2,41.5 L4.5,38 L7,41.5 Z" fill="#c4bfae" opacity="0.6"/>
-
-        {/* CORNICE — chipped and uneven */}
-        <g filter="url(#weathered)">
-          <rect x="0" y="41.5" width="400" height="2.5" fill="#ddd8c8" opacity="0.75"/>
-          <rect x="0" y="44" width="400" height="2.5" fill="url(#agedGrad)"/>
-        </g>
-        {/* Missing cornice chunks */}
-        <rect x="88" y="41.5" width="17" height="5" fill="#0a1420" opacity="0.55"/>
-        <rect x="211" y="42" width="12" height="4.5" fill="#0a1420" opacity="0.5"/>
-        <rect x="318" y="41.8" width="9" height="4.7" fill="#0a1420" opacity="0.45"/>
-        {/* Mutules — some broken off */}
-        {[25,65,145,185,265,305,385].map((mx,mi)=>(
-          <rect key={mi} x={mx-7} y="46.5" width={mi%3===0?10:14} height="1.6"
-            fill="#b8b3a4" opacity={0.35+((mi*7)%4)*0.1}/>
-        ))}
-        {/* DORIC FRIEZE — triglyphs over each column and midpoint */}
-        <rect x="0" y="48.5" width="400" height="8" fill="#5c6675" opacity="0.22"/>
-        {[45,95,145,200,255,305,355,10,390].map((tx,ti)=>{
-          const dmg=(ti*13)%5;           // pseudo-random damage per triglyph
-          const h=dmg===0?5.5:dmg===3?6.8:8;
-          return(
-            <g key={ti} filter="url(#weathered)" opacity={dmg===4?0.45:0.9}>
-              <rect x={tx-5} y="48.5" width={dmg===1?8:10} height={h} fill="url(#agedGrad)"/>
-              <line x1={tx-2.5} y1="49.2" x2={tx-2.5} y2={48.5+h-0.5} stroke="#4a4943" strokeWidth="0.9" opacity="0.65"/>
-              <line x1={tx+2.5} y1="49.2" x2={tx+2.5} y2={48.5+h-0.5} stroke="#4a4943" strokeWidth="0.9" opacity="0.6"/>
-              <line x1={tx-5}   y1="49.2" x2={tx-5}   y2={48.5+h-0.5} stroke="#5f5e57" strokeWidth="0.6" opacity="0.45"/>
-              {dmg!==0&&<rect x={tx-4} y="56.5" width={dmg===2?5:8} height="1" fill="#b8b3a4" opacity="0.45"/>}
-            </g>
-          );
-        })}
-        {/* ARCHITRAVE — plain undecorated beam (Doric) */}
-        <rect x="0" y="57.5" width="400" height="2.5" fill="url(#colGrad)"/>
-        <rect x="0" y="60" width="400" height="0.8" fill="#7c8697" opacity="0.5"/>
-
-        {/* Modern columns */}
-        {[45,145,255,355].map((cx,i)=>{
-          const dmg=i;  // 0=intact-ish, 1=chipped, 2=broken short, 3=cracked
-          const topY = dmg===2 ? 78 : 60.5;      // broken column starts lower
-          const hasCapital = dmg!==2;
-          return(
-          <g key={i}>
-            {hasCapital&&(
-            <g filter="url(#weathered)">
-              {/* Abacus — chipped corners */}
-              <path d={dmg===1
-                ? `M${cx-15},60.5 L${cx+16},60.8 L${cx+15.5},63.5 L${cx-16},63.2 Z`
-                : `M${cx-16},60.5 L${cx+16},60.5 L${cx+16},63.5 L${cx-16},63.5 Z`}
-                fill="#ddd8c8" opacity="0.85"/>
-              <rect x={cx-16} y="63.5" width="32" height="1" fill="#5f5e57" opacity="0.5"/>
-              {/* Echinus — eroded flare */}
-              <path d={`M${cx-15},64.5 Q${cx-13.5},68 ${cx-11},70 L${cx+11},70 Q${cx+13.5},68 ${cx+15},64.5 Z`}
-                fill="url(#agedGrad)"/>
-              {/* Annulets — some worn away */}
-              <rect x={cx-11} y="70.2" width="22" height="0.7" fill="#6b6a63" opacity="0.55"/>
-              {dmg!==1&&<rect x={cx-11} y="71.4" width={dmg===3?16:22} height="0.7" fill="#6b6a63" opacity="0.42"/>}
-              <rect x={cx-11} y="72.6" width={dmg===3?12:20} height="0.6" fill="#6b6a63" opacity="0.35"/>
-            </g>)}
-
-            {/* SHAFT — drums with joint lines, cracks, missing pieces */}
-            <g filter="url(#weathered)">
-              <path d={`M${cx-10.5},${topY+12.8} Q${cx-12},80 ${cx-12.5},89.5 L${cx+12.5},89.5 Q${cx+12},80 ${cx+10.5},${topY+12.8} Z`}
-                fill="url(#agedGradV)"/>
-            </g>
-
-            {/* Drum joint lines — horizontal seams between stone blocks */}
-            {[77,81.5,86].filter(y=>y>topY+13).map((jy,ji)=>(
-              <line key={ji} x1={cx-11.6} y1={jy} x2={cx+11.6} y2={jy}
-                stroke="#4a4943" strokeWidth="0.5" opacity="0.4"/>
-            ))}
-
-            {/* Flutes — worn, uneven opacity */}
-            {[-10.5,-8.2,-5.9,-3.6,-1.3,1.3,3.6,5.9,8.2,10.5].map((fx,fi)=>{
-              const btm=fx*1.19;
-              const wear=0.28+((fi*11)%5)*0.09;
-              return(
-                <g key={fi}>
-                  <line x1={cx+fx} y1={topY+13} x2={cx+btm} y2="89.5"
-                    stroke="#4a4943" strokeWidth="0.7" opacity={wear}/>
-                  <line x1={cx+fx+1.15} y1={topY+13} x2={cx+btm*1.06} y2="89.5"
-                    stroke="#e8e2d2" strokeWidth="0.8" opacity={wear*1.4}/>
-                </g>
-              );
-            })}
-
-            {/* Cracks */}
-            {dmg===3&&(
-              <path d={`M${cx-4},${topY+14} L${cx-2},${topY+22} L${cx-5},${topY+29} L${cx-3},89.5`}
-                fill="none" stroke="#3a3934" strokeWidth="0.6" opacity="0.55"/>
-            )}
-            {dmg===1&&(
-              <path d={`M${cx+6},74 L${cx+8},80 L${cx+5},84`}
-                fill="none" stroke="#3a3934" strokeWidth="0.5" opacity="0.45"/>
-            )}
-
-            {/* Chipped edge bites */}
-            {dmg===1&&<path d={`M${cx+10.8},76 L${cx+13},78 L${cx+11},81 Z`} fill="#0a1420" opacity="0.5"/>}
-            {dmg===3&&<path d={`M${cx-11.8},82 L${cx-14},84.5 L${cx-11.5},87 Z`} fill="#0a1420" opacity="0.45"/>}
-            {dmg===2&&(
-              <>
-                {/* Jagged broken top */}
-                <path d={`M${cx-10.5},${topY+12.8} L${cx-6},${topY+9} L${cx-1},${topY+13.5} L${cx+4},${topY+8} L${cx+8},${topY+12} L${cx+10.5},${topY+10.5} L${cx+10.5},${topY+14} L${cx-10.5},${topY+14} Z`}
-                  fill="url(#agedGradV)"/>
-                <path d={`M${cx-10.5},${topY+12.8} L${cx-6},${topY+9} L${cx-1},${topY+13.5} L${cx+4},${topY+8} L${cx+8},${topY+12} L${cx+10.5},${topY+10.5}`}
-                  fill="none" stroke="#3a3934" strokeWidth="0.7" opacity="0.6"/>
-              </>
-            )}
-
-            {/* Category tint */}
-            <path d={`M${cx-10.5},${topY+12.8} Q${cx-12},80 ${cx-12.5},89.5 L${cx+12.5},89.5 Q${cx+12},80 ${cx+10.5},${topY+12.8} Z`}
-              fill={color} opacity="0.05"/>
-          </g>);
-        })}</svg>
-
-      {/* Content area flanked by side columns */}
-      <div style={{position:"relative",display:"flex",alignItems:"stretch"}}>
-        {/* Left column */}
-        <svg width="26" style={{flexShrink:0,alignSelf:"stretch"}} preserveAspectRatio="none" viewBox="0 0 38 100">
+      {/* ---- open sky above the temple ---- */}
+      <div style={{position:"absolute",bottom:"100%",left:0,right:0,height:"42vh",
+                   pointerEvents:"none",overflow:"hidden"}}>
+        <svg viewBox="0 0 400 110" preserveAspectRatio="none" style={{width:"100%",height:"100%",display:"block"}}>
           <defs>
-            <linearGradient id="sideGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%"   stopColor="#7c8697" stopOpacity="0.7"/>
-              <stop offset="25%"  stopColor="#e2e8f0" stopOpacity="0.92"/>
-              <stop offset="48%"  stopColor="#ffffff" stopOpacity="1"/>
-              <stop offset="72%"  stopColor="#c9d1dd" stopOpacity="0.88"/>
-              <stop offset="100%" stopColor="#8a94a6" stopOpacity="0.7"/>
+            <linearGradient id="openSky" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%"   stopColor="#050b14" stopOpacity="0"/>
+              <stop offset="45%"  stopColor="#132a42" stopOpacity="0.35"/>
+              <stop offset="100%" stopColor="#20455f" stopOpacity="0.6"/>
             </linearGradient>
+            <radialGradient id="skyCloud" cx="42%" cy="32%" r="72%">
+              <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.95"/>
+              <stop offset="55%"  stopColor="#eef4fb" stopOpacity="0.7"/>
+              <stop offset="100%" stopColor="#b9c6d8" stopOpacity="0.32"/>
+            </radialGradient>
+            <filter id="skyFar"><feGaussianBlur stdDeviation="3.2"/></filter>
+            <filter id="skyNear"><feGaussianBlur stdDeviation="1.5"/></filter>
           </defs>
-          <g filter="url(#weathered)">
-            <rect x="1" y="0" width="36" height="100" fill="url(#agedGradV)"/>
+          <rect x="0" y="0" width="400" height="110" fill="url(#openSky)"/>
+          <g fill="url(#skyCloud)" filter="url(#skyFar)">
+            {SKY_CLOUDS.map(([bx,by,s,sp,op],i)=>(
+              <Cloud key={"sb"+i} x={((bx+t*sp*1.6)%150)*400/150-50} y={by+Math.sin(t*0.28+i)*2.2} s={s*1.35} op={op*0.5}/>
+            ))}
           </g>
-          <rect x="1" y="0" width="36" height="100" fill={color} opacity="0.05"/>
-          {/* Drum joints */}
-          <line x1="1" y1="22" x2="37" y2="22" stroke="#4a4943" strokeWidth="0.6" opacity="0.35"/>
-          <line x1="1" y1="48" x2="37" y2="48" stroke="#4a4943" strokeWidth="0.6" opacity="0.32"/>
-          <line x1="1" y1="74" x2="37" y2="74" stroke="#4a4943" strokeWidth="0.6" opacity="0.3"/>
-          {/* Worn flutes */}
-          <line x1="4"    y1="0" x2="4"    y2="100" stroke="#3a3934" strokeWidth="0.9" opacity="0.35"/>
-          <line x1="7.5"  y1="0" x2="7.5"  y2="100" stroke="#e8e2d2" strokeWidth="1.1" opacity="0.5"/>
-          <line x1="11"   y1="0" x2="11"   y2="100" stroke="#4a4943" strokeWidth="0.9" opacity="0.4"/>
-          <line x1="14.5" y1="0" x2="14.5" y2="100" stroke="#e8e2d2" strokeWidth="1" opacity="0.42"/>
-          <line x1="18"   y1="0" x2="18"   y2="100" stroke="#5f5e57" strokeWidth="0.9" opacity="0.38"/>
-          <line x1="21.5" y1="0" x2="21.5" y2="100" stroke="#ddd8c8" strokeWidth="1" opacity="0.45"/>
-          <line x1="25"   y1="0" x2="25"   y2="100" stroke="#4a4943" strokeWidth="0.9" opacity="0.35"/>
-          <line x1="28.5" y1="0" x2="28.5" y2="100" stroke="#e8e2d2" strokeWidth="0.95" opacity="0.4"/>
-          <line x1="32"   y1="0" x2="32"   y2="100" stroke="#4a4943" strokeWidth="0.9" opacity="0.33"/>
-          <line x1="35"   y1="0" x2="35"   y2="100" stroke="#3a3934" strokeWidth="0.7" opacity="0.3"/>
-          {/* Cracks and chips */}
-          <path d="M12,18 L15,32 L11,44 L14,58" fill="none" stroke="#2e2d29" strokeWidth="0.6" opacity="0.35"/>
-          <path d="M1,62 L5,65 L1,69 Z" fill="#0a1420" opacity="0.4"/>
-          <path d="M37,30 L33,33 L37,37 Z" fill="#0a1420" opacity="0.35"/>>>
-        </svg>
-
-        {/* Actual content */}
-        <div style={{flex:1,minWidth:0}}>{children}</div>
-
-        {/* Right column */}
-        <svg width="26" style={{flexShrink:0,alignSelf:"stretch"}} preserveAspectRatio="none" viewBox="0 0 38 100">
-          <rect x="1" y="0" width="36" height="100" fill="url(#sideGrad)"/>
-          <rect x="1" y="0" width="36" height="100" fill={color} opacity="0.05"/>
-          {/* Doric annulets at top */}
-          <rect x="1" y="0" width="36" height="0.8" fill="#8f9aab" opacity="0.55"/>
-          <rect x="1" y="1.4" width="36" height="0.7" fill="#8f9aab" opacity="0.45"/>
-          {/* 20 flutes — alternating groove shadow and arris highlight */}
-          <line x1="4"  y1="0" x2="4"  y2="100" stroke="#5c6675" strokeWidth="0.9" opacity="0.5"/>
-          <line x1="7.5" y1="0" x2="7.5" y2="100" stroke="#ffffff" strokeWidth="1.1" opacity="0.72"/>
-          <line x1="11" y1="0" x2="11" y2="100" stroke="#6f7a8c" strokeWidth="0.9" opacity="0.52"/>
-          <line x1="14.5" y1="0" x2="14.5" y2="100" stroke="#ffffff" strokeWidth="1" opacity="0.68"/>
-          <line x1="18" y1="0" x2="18" y2="100" stroke="#8f9aab" strokeWidth="0.9" opacity="0.5"/>
-          <line x1="21.5" y1="0" x2="21.5" y2="100" stroke="#ffffff" strokeWidth="1" opacity="0.65"/>
-          <line x1="25" y1="0" x2="25" y2="100" stroke="#7c8697" strokeWidth="0.9" opacity="0.5"/>
-          <line x1="28.5" y1="0" x2="28.5" y2="100" stroke="#ffffff" strokeWidth="0.95" opacity="0.6"/>
-          <line x1="32" y1="0" x2="32" y2="100" stroke="#6f7a8c" strokeWidth="0.9" opacity="0.48"/>
-          <line x1="35" y1="0" x2="35" y2="100" stroke="#5c6675" strokeWidth="0.7" opacity="0.42"/>>
+          <g fill="url(#skyCloud)" filter="url(#skyNear)">
+            {SKY_CLOUDS.map(([bx,by,s,sp,op],i)=>(
+              <Cloud key={"sf"+i} x={((bx+t*sp*2.6)%150)*400/150-50} y={by+Math.sin(t*0.36+i)*3} s={s} op={op}/>
+            ))}
+          </g>
         </svg>
       </div>
 
-      {/* Base platform */}
-      <svg viewBox="0 0 400 14" preserveAspectRatio="none" style={{width:"100%",height:10,display:"block",marginTop:-2}}>
-        {/* STYLOBATE — worn steps with missing chunks */}
-        <g filter="url(#weathered)">
-          <rect x="0" y="0"   width="400" height="1.2" fill="#e8e2d2" opacity="0.6"/>
-          <rect x="0" y="1.2" width="400" height="3.3" fill="url(#agedGrad)"/>
-          <rect x="0" y="4.5" width="400" height="0.8" fill="#5f5e57" opacity="0.45"/>
-          <rect x="0" y="5.3" width="400" height="3.5" fill="url(#agedGrad)" opacity="0.85"/>
-          <rect x="0" y="8.8" width="400" height="0.8" fill="#5f5e57" opacity="0.4"/>
-          <rect x="0" y="9.6" width="400" height="4.4" fill="url(#agedGrad)" opacity="0.75"/>
-        </g>
-        {/* Missing step chunks */}
-        <rect x="62" y="0" width="14" height="4.5" fill="#0a1420" opacity="0.45"/>
-        <rect x="188" y="5.3" width="10" height="3.5" fill="#0a1420" opacity="0.4"/>
-        <rect x="298" y="9.6" width="18" height="4.4" fill="#0a1420" opacity="0.35"/>
-        {/* Cracks across the platform */}
-        <path d="M120,0 L124,5 L119,9.6 L123,14" fill="none" stroke="#3a3934" strokeWidth="0.6" opacity="0.4"/>
-        <path d="M256,1 L252,6 L257,10 L253,14" fill="none" stroke="#3a3934" strokeWidth="0.5" opacity="0.35"/>
-        <rect x="0" y="0"   width="400" height="14" fill={color} opacity="0.04"/>
-      </svg>
+      {/* ---- the temple, in perspective, with the oracle inside ---- */}
+      <div style={{position:"relative",width:"100%"}}>
+        <svg viewBox="0 0 400 230" preserveAspectRatio="xMidYMax meet"
+             style={{width:"100%",height:"auto",display:"block"}}>
+          <defs>
+            <linearGradient id="agedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stopColor="#6b6a63" stopOpacity="0.85"/>
+              <stop offset="20%"  stopColor="#b8b3a4" stopOpacity="0.93"/>
+              <stop offset="42%"  stopColor="#e4dfcf" stopOpacity="0.97"/>
+              <stop offset="62%"  stopColor="#c4bfae" stopOpacity="0.92"/>
+              <stop offset="85%"  stopColor="#8f8b7e" stopOpacity="0.85"/>
+              <stop offset="100%" stopColor="#5f5e57" stopOpacity="0.78"/>
+            </linearGradient>
+            <linearGradient id="agedGradV" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stopColor="#5f5e57" stopOpacity="0.8"/>
+              <stop offset="24%"  stopColor="#c0bbab" stopOpacity="0.92"/>
+              <stop offset="48%"  stopColor="#e8e3d3" stopOpacity="0.97"/>
+              <stop offset="74%"  stopColor="#a9a496" stopOpacity="0.9"/>
+              <stop offset="100%" stopColor="#6b6a63" stopOpacity="0.8"/>
+            </linearGradient>
+            <linearGradient id="cellaWall" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%"   stopColor="#1a1f28" stopOpacity="0.96"/>
+              <stop offset="55%"  stopColor="#111721" stopOpacity="0.98"/>
+              <stop offset="100%" stopColor="#0a0f18" stopOpacity="1"/>
+            </linearGradient>
+            <radialGradient id="oracleGlow" cx="50%" cy="52%" r="60%">
+              <stop offset="0%"   stopColor={color} stopOpacity="0.55"/>
+              <stop offset="55%"  stopColor={color} stopOpacity="0.18"/>
+              <stop offset="100%" stopColor={color} stopOpacity="0"/>
+            </radialGradient>
+            <radialGradient id="templeCloud" cx="42%" cy="32%" r="72%">
+              <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.95"/>
+              <stop offset="55%"  stopColor="#eef4fb" stopOpacity="0.68"/>
+              <stop offset="100%" stopColor="#b9c6d8" stopOpacity="0.3"/>
+            </radialGradient>
+            <filter id="templeCloudSoft"><feGaussianBlur stdDeviation="2.4"/></filter>
+            <filter id="templeCloudSharp"><feGaussianBlur stdDeviation="1.1"/></filter>
+            <radialGradient id="torchGlow" cx="50%" cy="55%" r="50%">
+              <stop offset="0%"   stopColor="#ffb347" stopOpacity="0.5"/>
+              <stop offset="45%"  stopColor="#ff7a1a" stopOpacity="0.18"/>
+              <stop offset="100%" stopColor="#ff7a1a" stopOpacity="0"/>
+            </radialGradient>
+            <linearGradient id="flameOuter" x1="0%" y1="100%" x2="0%" y2="0%">
+              <stop offset="0%"   stopColor="#c2410c" stopOpacity="0.9"/>
+              <stop offset="35%"  stopColor="#f97316"/>
+              <stop offset="75%"  stopColor="#fbbf24"/>
+              <stop offset="100%" stopColor="#fde68a" stopOpacity="0.75"/>
+            </linearGradient>
+            <linearGradient id="flameInner" x1="0%" y1="100%" x2="0%" y2="0%">
+              <stop offset="0%"   stopColor="#fb923c"/>
+              <stop offset="50%"  stopColor="#fde047"/>
+              <stop offset="100%" stopColor="#fffbeb"/>
+            </linearGradient>
+            <filter id="weathered" x="-20%" y="-20%" width="140%" height="140%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.9 0.35" numOctaves="4" seed="7" result="n"/>
+              <feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/>
+            </filter>
+            <filter id="eroded" x="-30%" y="-30%" width="160%" height="160%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.55 0.25" numOctaves="5" seed="13" result="n"/>
+              <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"/>
+            </filter>
+          </defs>
+
+          {/* floor of the cella, receding to the vanishing point */}
+          <path d={`M40,214 L360,214 L${depth({x:326,y:214},D).x},${depth({x:326,y:214},D).y} L${depth({x:74,y:214},D).x},${depth({x:74,y:214},D).y} Z`}
+                fill="#171c24" opacity="0.92"/>
+          {[0.16,0.34,0.55,0.78].map((u,i)=>{
+            const a=depth({x:40,y:214},u*D), b=depth({x:360,y:214},u*D);
+            return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#2b323d" strokeWidth="0.6" opacity={0.5-u*0.3}/>;
+          })}
+
+          {/* back wall of the cella */}
+          <path d={`M${depth({x:74,y:66},D).x},${depth({x:74,y:66},D).y}
+                    L${depth({x:326,y:66},D).x},${depth({x:326,y:66},D).y}
+                    L${depth({x:326,y:214},D).x},${depth({x:326,y:214},D).y}
+                    L${depth({x:74,y:214},D).x},${depth({x:74,y:214},D).y} Z`}
+                fill="url(#cellaWall)"/>
+
+          {/* the oracle's light, spilling from the back of the sanctuary */}
+          <ellipse cx="200" cy="150" rx="118" ry="82" fill="url(#oracleGlow)"
+                   opacity={0.75+Math.sin(t*0.9)*0.18}/>
+
+          {/* side colonnades receding inward */}
+          {SIDE_L.slice(1).map(([cx,k],i)=><Column key={"l"+i} cx={cx} k={k} dmg={0}/>)}
+          {SIDE_R.slice(1).map(([cx,k],i)=><Column key={"r"+i} cx={cx} k={k} dmg={0}/>)}
+
+          {/* ----- entablature ----- */}
+          <g filter="url(#weathered)">
+            {/* architrave */}
+            <rect x="8" y="46" width="384" height="8" fill="url(#agedGrad)"/>
+            {/* frieze band */}
+            <rect x="8" y="34" width="384" height="12" fill="#5c5b54" opacity="0.3"/>
+          </g>
+          {/* triglyphs, some broken */}
+          {[26,74,122,170,218,266,314,362].map((tx,i)=>{
+            const h=[12,9,12,12,7,12,10,12][i];
+            return(
+              <g key={i} filter="url(#weathered)" opacity={h<10?0.55:0.92}>
+                <rect x={tx-6} y="34" width="12" height={h} fill="url(#agedGrad)"/>
+                <line x1={tx-3} y1="35" x2={tx-3} y2={33+h} stroke="#4a4943" strokeWidth="1" opacity="0.6"/>
+                <line x1={tx+3} y1="35" x2={tx+3} y2={33+h} stroke="#4a4943" strokeWidth="1" opacity="0.6"/>
+              </g>
+            );
+          })}
+          {/* cornice */}
+          <g filter="url(#weathered)">
+            <rect x="4" y="28" width="392" height="4" fill="#efe9d9" opacity="0.8"/>
+            <rect x="4" y="32" width="392" height="2.5" fill="url(#agedGrad)"/>
+          </g>
+          <rect x="96" y="28" width="20" height="6" fill="#050b14" opacity="0.5"/>
+          <rect x="242" y="28" width="14" height="6" fill="#050b14" opacity="0.45"/>
+
+          {/* clouds drifting behind the roofline */}
+          <g fill="url(#templeCloud)" filter="url(#templeCloudSoft)">
+            {SKY_CLOUDS.slice(0,5).map(([bx,by,s,sp],i)=>(
+              <Cloud key={"tb"+i}
+                     x={((bx+t*sp*2.2)%150)*400/150-50}
+                     y={4+ (by%22)*0.6 + Math.sin(t*0.42+i)*1.8}
+                     s={s*0.62} op={0.30}/>
+            ))}
+          </g>
+          <g fill="url(#templeCloud)" filter="url(#templeCloudSharp)">
+            {SKY_CLOUDS.slice(2,6).map(([bx,by,s,sp],i)=>(
+              <Cloud key={"tf"+i}
+                     x={((bx*1.4+t*sp*3.4)%150)*400/150-50}
+                     y={9+ (by%16)*0.5 + Math.sin(t*0.55+i)*2.2}
+                     s={s*0.46} op={0.42}/>
+            ))}
+          </g>
+
+          {/* ruined pediment */}
+          <g filter="url(#eroded)">
+            <path d="M6,28 L70,18 L118,10 L160,5 L176,3 L172,28 Z" fill="url(#agedGrad)" opacity="0.93"/>
+            <path d="M236,6 L280,10 L330,17 L394,28 L242,28 Z" fill="url(#agedGrad)" opacity="0.9"/>
+            <path d="M192,4 L214,2 L222,7 L204,10 Z" fill="url(#agedGrad)" opacity="0.72"/>
+          </g>
+          <path d="M6,28 L176,3" fill="none" stroke="#efe9d9" strokeWidth="1.5" opacity="0.55" strokeDasharray="30 6 16 9 24"/>
+          <path d="M236,6 L394,28" fill="none" stroke="#efe9d9" strokeWidth="1.5" opacity="0.5" strokeDasharray="20 7 26 5"/>
+          <circle cx="206" cy="26" r="1.6" fill="#8f8b7e" opacity="0.5"/>
+          <circle cx="224" cy="27" r="1.1" fill="#a9a496" opacity="0.45"/>
+
+          {/* front columns, drawn last so they overlap everything */}
+          {FRONT.map((cx,i)=><Column key={"f"+i} cx={cx} k={0} dmg={i===1?1:i===2?2:0}/>)}
+
+          {/* torches burning on the front colonnade */}
+          {FRONT.map((cx,i)=>(
+            <Torch key={"t"+i} x={cx} y={104} s={1.15} seed={i*1.9}/>
+          ))}
+          {/* two more deeper inside, smaller and dimmer */}
+          <g opacity="0.62">
+            <Torch x={depth({x:74,y:104},0.30).x}  y={depth({x:74,y:104},0.30).y}  s={0.72} seed={4.3}/>
+            <Torch x={depth({x:326,y:104},0.30).x} y={depth({x:326,y:104},0.30).y} s={0.72} seed={5.6}/>
+          </g>
+
+          {/* stylobate steps */}
+          <g filter="url(#weathered)">
+            <rect x="0" y="214" width="400" height="5" fill="url(#agedGrad)"/>
+            <rect x="0" y="219" width="400" height="1" fill="#5f5e57" opacity="0.5"/>
+            <rect x="0" y="220" width="400" height="5" fill="url(#agedGrad)" opacity="0.88"/>
+            <rect x="0" y="225" width="400" height="5" fill="url(#agedGrad)" opacity="0.76"/>
+          </g>
+          <rect x="62" y="214" width="15" height="5" fill="#050b14" opacity="0.4"/>
+          <rect x="300" y="220" width="18" height="5" fill="#050b14" opacity="0.32"/>
+        </svg>
+
+        {/* ---- the oracle: the text box, seated inside the sanctuary ---- */}
+        <div style={{position:"absolute",left:"22%",right:"22%",top:"27%",bottom:"12%",
+                     display:"flex",alignItems:"center"}}>
+          <div style={{width:"100%"}}>{children}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1632,7 +1620,7 @@ export default function Maestro(){
   const accentColor=selectedCategory?.sectionColor||"#c77dff";
 
   return(
-    <div style={{minHeight:"100vh",maxHeight:"100vh",width:"100vw",overflowX:"hidden",background:screen==="describe"?"linear-gradient(180deg,#0a1420 0%,#0d1a2a 40%,#050a12 100%)":(darkMode?"#f0f4f8":"#000"),color:darkMode?"#111":"#eee",fontFamily:"Georgia,serif",position:"relative",overflowX:"hidden"}}>
+    <div style={{minHeight:"100vh",maxHeight:"100vh",width:"100vw",overflowX:"hidden",background:screen==="describe"?"linear-gradient(180deg,#050b14 0%,#0a1727 32%,#132a42 66%,#1d3d5c 100%)":(darkMode?"#f0f4f8":"#000"),color:darkMode?"#111":"#eee",fontFamily:"Georgia,serif",position:"relative",overflowX:"hidden"}}>
       {screen!=="describe" && !LOW_MEM && <MatrixRain/>}
       <header style={{position:"sticky",top:0,zIndex:10,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",width:"100%",boxSizing:"border-box",background:"rgba(0,10,0,0.82)",backdropFilter:"blur(14px)",borderBottom:"1px solid rgba(0,255,65,0.15)"}}>
         <button onClick={reset} style={{display:"flex",alignItems:"center",gap:10,background:"none",border:"none",cursor:"pointer",padding:0}}>
@@ -1794,8 +1782,8 @@ export default function Maestro(){
         )}
 
         {screen==="describe"&&(
-          <div style={{animation:"fadeIn 0.35s ease"}}>
-            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+          <div style={{animation:"fadeIn 0.35s ease",display:"flex",flexDirection:"column",justifyContent:"flex-end",minHeight:"calc(100vh - 150px)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
               <div style={{width:46,height:46,filter:`drop-shadow(0 0 10px ${accentColor})`}}>
                 {selectedCategory&&ICONS[selectedCategory.id]&&<CyberIcon d={ICONS[selectedCategory.id].d} d2={ICONS[selectedCategory.id].d2} color={accentColor} size={32} gradId={`desc_${selectedCategory.id}`}/>}
               </div>
@@ -1805,9 +1793,9 @@ export default function Maestro(){
               </div>
             </div>
             <ColumnFrame color={accentColor}>
-            <div style={{background:"rgba(0,8,20,0.88)",border:`1px solid ${accentColor}33`,borderRadius:4,padding:14,display:"flex",flexDirection:"column",gap:12}}>
+            <div style={{background:"rgba(4,10,20,0.72)",border:`1px solid ${accentColor}55`,borderRadius:6,padding:10,display:"flex",flexDirection:"column",gap:8,backdropFilter:"blur(3px)",boxShadow:`0 0 26px ${accentColor}33, inset 0 0 18px rgba(0,0,0,0.55)`}}>
               <div style={{position:"relative"}}>
-                <textarea style={{width:"100%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(0,180,255,0.2)",borderRadius:4,color:"#00cfff",fontSize:15,padding:"14px 16px",fontFamily:"monospace",resize:"vertical",boxSizing:"border-box",lineHeight:1.6}} placeholder="Describe el problema... o pulsa 🎤" value={problem} onChange={e=>setProblem(e.target.value)} rows={4}/>
+                <textarea style={{width:"100%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(0,180,255,0.2)",borderRadius:4,color:"#00cfff",fontSize:14,padding:"9px 12px",fontFamily:"monospace",resize:"vertical",boxSizing:"border-box",lineHeight:1.45}} placeholder="Describe el problema... o pulsa 🎤" value={problem} onChange={e=>setProblem(e.target.value)} rows={2}/>
                 <button onClick={()=>listening?stopListening():startListening(t=>setProblem(p=>p?p+" "+t:t))} style={{position:"absolute",top:10,right:10,width:34,height:34,borderRadius:"50%",border:`2px solid ${listening?"#ff6b6b":"rgba(0,180,255,0.4)"}`,background:listening?"rgba(255,80,80,0.2)":"rgba(0,180,255,0.1)",color:listening?"#ff6b6b":"#00cfff",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{listening?"⏹":"🎤"}</button>
               </div>
               <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,opacity:problem.trim()?1:0.4,fontFamily:"monospace"}} onClick={fetchGuide} disabled={!problem.trim()}>
