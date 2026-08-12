@@ -695,7 +695,7 @@ function ColumnFrame({color,children,altarDelay=0}){
   // A wall torch: bracket, bowl and a flame whose silhouette is rebuilt every
   // frame from a few sine waves so it never repeats exactly.
   const Torch=({x,y,s,seed})=>{
-    const f=t*10.2+seed;
+    const f=t*40.8+seed;
     const w1=Math.sin(f)*1.5, w2=Math.sin(f*1.7+1.1)*1.1, w3=Math.sin(f*2.3+2.2)*0.8;
     const h =1+Math.sin(f*1.3)*0.13;            // flame breathes up and down
     const H =17*h;
@@ -928,15 +928,19 @@ function ColumnFrame({color,children,altarDelay=0}){
         </svg>
 
         {/* ---- the oracle: a carved stone altar holding the text ---- */}
-        <div style={{position:"absolute",left:"26%",right:"26%",top:"20%",bottom:"12%",
-                     display:"flex",alignItems:"center",
-                     animation:`altarSettle 1.1s cubic-bezier(.2,1.5,.4,1) ${altarDelay}ms both`}}>
-          <div style={{position:"relative",width:"100%"}}>
+        <div style={{position:"absolute",left:"24%",right:"24%",top:"17%",bottom:"8%",
+                     animation:`altarSettle 1.1s cubic-bezier(.2,1.5,.4,1) ${altarDelay}ms both`,
+                     transformOrigin:"50% 100%"}}>
+          <div style={{position:"relative",width:"100%",height:"100%"}}>
+
+            {/* One box holds both the carving and the words, so the inscription
+                can be placed in the same coordinate space as the panel cut into
+                the stone (viewBox 200x150, panel at x40-160, y26-120). */}
+            <div style={{position:"absolute",inset:0}}>
 
             {/* the monolith: a standing slab of carved stone */}
             <svg viewBox="0 0 200 150" preserveAspectRatio="none"
-                 style={{position:"absolute",inset:"-30px -22px -26px -22px",
-                         width:"calc(100% + 44px)",height:"calc(100% + 56px)",
+                 style={{position:"absolute",inset:0,width:"100%",height:"100%",
                          display:"block",filter:"drop-shadow(0 10px 26px rgba(0,0,0,.75))",
                          animation:`altarReveal .01s linear ${altarDelay}ms both`}}>
               <defs>
@@ -984,7 +988,7 @@ function ColumnFrame({color,children,altarDelay=0}){
 
               {/* carved ornament above the panel */}
               <circle cx="100" cy="19" r="4.5" fill="none" stroke="#8a867a" strokeWidth="1.2" opacity="0.75"/>
-              <path d="M92,19 L74,19 M108,19 L126,19" stroke="#8a867a" strokeWidth="1.1" opacity="0.6"/>
+              <path d="M93,19 L80,19 M107,19 L120,19" stroke="#8a867a" strokeWidth="1.1" opacity="0.6"/>
 
               {/* age: chips, cracks, missing corners */}
               <path d="M22,132 L34,126 L24,118 Z" fill="#050b14" opacity="0.5"/>
@@ -994,8 +998,15 @@ function ColumnFrame({color,children,altarDelay=0}){
               <path d="M100,132 L98,142" stroke="#3e3c36" strokeWidth="0.7" opacity="0.3"/>
             </svg>
 
-            {/* the writing itself */}
-            <div style={{position:"relative"}}>{children}</div>
+            {/* the writing itself, seated inside the carved recess */}
+            <div style={{position:"absolute",
+                         left:"22%",right:"22%",top:"20.5%",bottom:"22%",
+                         display:"flex",flexDirection:"column",justifyContent:"center",
+                         overflow:"hidden"}}>
+              {children}
+            </div>
+
+            </div>
           </div>
         </div>
       </div>
@@ -1034,7 +1045,7 @@ function drawWrappedLabel(ctx,text,cx,topY,canvasW,maxLineW){
 function StarJourney({color,icon,from,onDone}){
   const canvasRef=React.useRef(null);
   const rafRef=React.useRef(null);
-  const DURATION=8000;
+  const DURATION=4400;
 
   React.useEffect(()=>{
     const canvas=canvasRef.current;
@@ -1050,17 +1061,45 @@ function StarJourney({color,icon,from,onDone}){
     const r0=from?.radius ?? 28;
     const spin0=from?.spin ?? 0;
     const tw0=from?.twinkle ?? 0;
-    const x1=W*0.5, y1=H*0.62;
-    // Arc: pull upward first, as if the star breaks orbit before diving.
-    const cxp=x0+(x1-x0)*0.34, cyp=Math.min(y0,y1)-H*0.20;
+    // ---- 3D approach -------------------------------------------------------
+    // The star does not slide across the screen: it flies in from deep space,
+    // grows as it nears the temple, drops through the roof and hits the floor.
+    // A single depth value z drives position and scale together, so the growth
+    // and the motion stay physically consistent.
+    // The star travels away from the viewer, toward the temple standing in the
+    // distance. So it must SHRINK as it goes: the vanishing point is the
+    // building, not the camera. Depth runs from 0 (near, where the star was)
+    // to ZT (the temple), and scale falls off with distance.
+    const FOV=3.4;
+    const persp=(z)=>FOV/(FOV+z);
+    const ZT=2.6;                          // how far away the temple sits
+    const floorX=W*0.5, floorY=H*0.70;     // impact point on the cella floor
+    const roofY=H*0.30;
+
+    // Anchors are screen positions; depth only scales the star.
+    const P0={x:x0,     y:y0,            z:0};    // where it was tapped
+    const P1={x:(x0+W*0.5)/2, y:roofY-H*0.26, z:ZT*0.5};  // high over the sky
+    const P2={x:W*0.5,  y:roofY-H*0.02,  z:ZT};    // entering the roof
+    const P3={x:floorX, y:floorY,        z:ZT};    // the cella floor
+
+    // Cubic Bezier through all four: the arc across the sky and the plunge
+    // inside are the same stroke, so there is no join to feel.
+    const cub=(a,b,c,d,k)=>{
+      const m=1-k;
+      return m*m*m*a + 3*m*m*k*b + 3*m*k*k*c + k*k*k*d;
+    };
+    const path3=(k)=>({
+      x:cub(P0.x,P1.x,P2.x,P3.x,k),
+      y:cub(P0.y,P1.y,P2.y,P3.y,k),
+      z:cub(P0.z,P1.z,P2.z,P3.z,k),
+    });
     const bez=(a,b,c,k)=>{const m=1-k;return m*m*a+2*m*k*b+k*k*c;};
     const easeInOut=(v)=>v<0.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2;
     // Gravity: barely moves at first, then accelerates, braking only at the end.
-    const fall=(v)=>{
-      const a=Math.pow(v,2.4);                 // acceleration
-      const b=1-Math.pow(1-v,3.2);             // late braking
-      return a*(1-v)+b*v;
-    };
+    // Eases out of the constellation, cruises, then commits to the drop.
+    // Smooth, monotonic acceleration. The old blend of two curves produced a
+    // slow patch mid-flight followed by a lurch; this keeps speed always rising.
+    const fall=(v)=>v*v*(3-2*v)*0.35 + Math.pow(v,2.2)*0.65;
 
     // The same sun renderer the constellation uses, so it is visibly the
     // same object continuing its motion.
@@ -1126,35 +1165,6 @@ function StarJourney({color,icon,from,onDone}){
       ctx.globalAlpha=1; ctx.restore();
     };
 
-    // Debris is generated once so every fragment keeps its own trajectory,
-    // mass and lifetime. Uniform particles read as a graphic; varied ones read
-    // as an explosion.
-    const sparks=Array.from({length:70},(_,i)=>{
-      const a=(i/70)*Math.PI*2+((i*137.5)%360)*Math.PI/180;
-      return {
-        a,
-        v:70+((i*97)%300),          // speed
-        s:1.5+((i*13)%7)*0.9,       // size
-        life:0.55+((i*29)%45)/100,  // how long before it burns out
-        hot:i%4===0,
-        drag:0.55+((i*7)%40)/100,   // heavier bits slow sooner
-        spin:((i*53)%100)/100,
-      };
-    });
-    // Chunks of stone thrown clear of the impact.
-    const shards=Array.from({length:14},(_,i)=>({
-      a:-Math.PI/2+(i/14-0.5)*2.4,
-      v:120+((i*71)%160),
-      s:4+((i*11)%6),
-      rot:((i*47)%360),
-    }));
-    // Smoke that lingers after the light has gone.
-    const smoke=Array.from({length:12},(_,i)=>({
-      a:(i/12)*Math.PI*2,
-      d:20+((i*37)%70),
-      r:18+((i*23)%30),
-      rise:30+((i*17)%40),
-    }));
 
     const t0=performance.now();
     const frame=(now)=>{
@@ -1165,115 +1175,75 @@ function StarJourney({color,icon,from,onDone}){
       // 0.14-0.62  it falls, gathering speed the whole way
       // 0.62-0.72  impact
       // 0.72-1.00  the glow dies and the stone sets
-      const travel=fall(Math.min(1,Math.max(0,(p-0.14)/0.48)));
-      const impact=Math.max(0,Math.min(1,(p-0.62)/0.16));
-      const settle=Math.max(0,Math.min(1,(p-0.74)/0.26));
+      // Short charge, then a genuinely fast dive: the fall now occupies a
+      // quarter of the timeline instead of half, so it reads as speed while
+      // the impact and the settling keep room to breathe.
+      // 0.00-0.12 charge  0.12-0.60 flight  0.60-0.74 impact  0.74-1.00 stone
+      // The phases now run right to the end: nothing is left holding a frozen
+      // frame while the clock runs out.
+      const travel=fall(Math.min(1,Math.max(0,(p-0.10)/0.56)));
+      // Deliberately NOT clamped: past 1 the debris keeps flying and fading,
+      // and the block below stops drawing entirely once it is spent. Clamping
+      // is what left the explosion frozen on screen at the end.
+      const impact=Math.max(0,(p-0.64)/0.14);
+      const settle=Math.max(0,Math.min(1,(p-0.64)/0.22));
 
       // charge-up: while still in place the star pulses and trembles
       const charge=Math.max(0,Math.min(1,p/0.14));
       const shiver=charge<1 ? Math.sin(t*26)*2.2*charge : 0;
-      const cx=bez(x0,cxp,x1,travel)+shiver;
-      const cy=bez(y0,cyp,y1,travel)+Math.cos(t*22)*1.6*(charge<1?charge:0);
+      // Two legs: approach through space to the roof, then the drop inside.
+      // A single cubic curve from the constellation to the floor. Splitting the
+      // path into "fly" and "drop" put a corner in the middle, which is what
+      // made the motion snap. One curve, one speed profile, no seam.
+      const q=path3(travel);
+      const sc=persp(q.z);
+      const cx=q.x+shiver;
+      const cy=q.y+Math.cos(t*22)*1.6*(charge<1?charge:0);
+      // true once the star has passed the roofline and is inside the building
+      const inside=cy>roofY;
       // Size holds, then flares on impact, then compacts into stone.
-      const r=r0*(1+charge*0.32+impact*0.9-settle*0.5);
-      const spin=spin0+Math.pow(travel,1.6)*11;
+      // Distance shrinks it; the flash and the collapse are the only growth.
+      const r=r0*sc*(1+charge*0.32+Math.min(1,impact)*0.18-settle*0.28);
+      const spin=spin0+Math.pow(travel,1.4)*17;
       const tw=tw0+t*2.4;
 
       ctx.clearRect(0,0,W,H);
 
       // Trail: ghosts of the path just travelled.
       if(travel>0.02&&travel<1){
-        for(let i=1;i<=8;i++){
-          const k=Math.max(0,travel-i*0.028);
-          drawSun(bez(x0,cxp,x1,k),bez(y0,cyp,y1,k),r0*(1-i*0.07),spin-i*0.35,tw,t,0.11-i*0.012,0.45);
+        const at=(k)=>{const q2=path3(k);return {x:q2.x,y:q2.y,s:persp(q2.z)};};
+        for(let i=1;i<=14;i++){
+          const k=Math.max(0,travel-i*0.020);
+          const q=at(k);
+          drawSun(q.x,q.y,r0*q.s*(1-i*0.035),spin-i*0.3,tw,t,0.15-i*0.009,0.4);
         }
       }
 
       // Impact effects
-      if(impact>0){
-        // A flash has to spike and vanish. Ramping it linearly just looks like
-        // fog, so brightness peaks almost instantly then falls away sharply.
-        const spike=Math.pow(1-impact,2.2);
-        ctx.fillStyle="rgba(255,255,255,"+(spike*0.95)+")";
+      // No blast: the star simply gives way to the stone. A brief bloom of its
+      // own light is all that marks the moment of change.
+      if(impact>0&&impact<1.4){
+        const bloom=Math.pow(Math.max(0,1-impact),1.6);
+        const g=ctx.createRadialGradient(floorX,floorY,0,floorX,floorY,220*(0.4+impact*0.9));
+        g.addColorStop(0,color+Math.round(bloom*150).toString(16).padStart(2,"0"));
+        g.addColorStop(0.5,color+Math.round(bloom*50).toString(16).padStart(2,"0"));
+        g.addColorStop(1,"transparent");
+        ctx.fillStyle=g;
         ctx.fillRect(0,0,W,H);
-        // coloured afterglow lingering a little longer
-        const halo=ctx.createRadialGradient(x1,y1,0,x1,y1,Math.max(W,H)*0.75);
-        halo.addColorStop(0,color+Math.round(spike*220).toString(16).padStart(2,"0"));
-        halo.addColorStop(0.4,color+Math.round(spike*90).toString(16).padStart(2,"0"));
-        halo.addColorStop(1,"transparent");
-        ctx.fillStyle=halo; ctx.fillRect(0,0,W,H);
+      }
 
-        [0,0.18,0.36].forEach((off)=>{
-          const k=Math.max(0,Math.min(1,(impact-off)/(1-off)));
-          if(k<=0) return;
-          ctx.beginPath();
-          ctx.ellipse(x1,y1,60+k*520,(60+k*520)*0.55,0,0,Math.PI*2);
-          ctx.strokeStyle=k<0.4?"#ffffff":color;
-          ctx.globalAlpha=Math.max(0,Math.pow(1-k,1.6)*0.95);
-          ctx.lineWidth=Math.max(1,10-k*9); ctx.stroke(); ctx.globalAlpha=1;
-        });
-
-        const beam=ctx.createLinearGradient(x1,y1,x1,0);
-        beam.addColorStop(0,color+"cc"); beam.addColorStop(0.45,color+"33");
-        beam.addColorStop(1,"transparent");
-        ctx.globalAlpha=Math.max(0,(1-settle)*0.75);
-        ctx.fillStyle=beam;
-        ctx.fillRect(x1-(70+impact*60),0,(140+impact*120),y1);
-        ctx.globalAlpha=1;
-
-        // --- embers: each one decelerates and falls under its own weight ---
-        sparks.forEach(sp=>{
-          const k=Math.min(1,impact/sp.life);
-          if(k>=1) return;
-          const eased=1-Math.pow(1-k,1/sp.drag);      // fast then slowing
-          const d=eased*sp.v;
-          const px=x1+Math.cos(sp.a)*d;
-          const py=y1+Math.sin(sp.a)*d*0.5 + Math.pow(k,2)*sp.v*0.55;  // gravity
-          const fade=Math.pow(1-k,1.5);
-          const rad=sp.s*(1-k*0.45);
-          // streak behind fast embers
-          if(sp.v>200&&k<0.5){
-            ctx.beginPath();
-            ctx.moveTo(px,py);
-            ctx.lineTo(px-Math.cos(sp.a)*rad*4,py-Math.sin(sp.a)*rad*2);
-            ctx.strokeStyle=sp.hot?"#fff6d8":color;
-            ctx.globalAlpha=fade*0.5; ctx.lineWidth=rad*0.8; ctx.stroke();
-          }
-          ctx.beginPath(); ctx.arc(px,py,rad,0,Math.PI*2);
-          ctx.fillStyle=sp.hot?"#fffbe8":color;
-          ctx.globalAlpha=fade; ctx.fill(); ctx.globalAlpha=1;
-        });
-
-        // --- stone shards tumbling outward ---
-        shards.forEach(sh=>{
-          const k=Math.min(1,impact/0.8);
-          if(k>=1) return;
-          const d=(1-Math.pow(1-k,2.2))*sh.v;
-          const px=x1+Math.cos(sh.a)*d;
-          const py=y1+Math.sin(sh.a)*d*0.6+Math.pow(k,2)*110;
-          ctx.save(); ctx.translate(px,py); ctx.rotate((sh.rot+k*420)*Math.PI/180);
-          ctx.globalAlpha=Math.max(0,1-k*1.1);
-          ctx.fillStyle="#b8b3a4";
-          ctx.fillRect(-sh.s/2,-sh.s/2.6,sh.s,sh.s*0.75);
-          ctx.fillStyle="#6b6a63";
-          ctx.fillRect(-sh.s/2,sh.s*0.1,sh.s,sh.s*0.2);
-          ctx.restore(); ctx.globalAlpha=1;
-        });
-
-        // --- dust cloud billowing out and up ---
-        smoke.forEach(sm=>{
-          const k=Math.min(1,impact/0.95);
-          const d=sm.d+k*80;
-          const px=x1+Math.cos(sm.a)*d;
-          const py=y1+Math.sin(sm.a)*d*0.34-k*sm.rise;
-          const rr=sm.r*(0.4+k*1.5);
-          const g=ctx.createRadialGradient(px,py,0,px,py,rr);
-          const a=Math.max(0,(1-k)*0.28);
-          g.addColorStop(0,"rgba(196,191,174,"+a+")");
-          g.addColorStop(1,"transparent");
-          ctx.beginPath(); ctx.arc(px,py,rr,0,Math.PI*2);
-          ctx.fillStyle=g; ctx.fill();
-        });
+      // Passing through the roof: a flash along the roofline and a torn hole
+      // that glows for a moment, so the entry reads as breaching the building.
+      const pierce=Math.max(0,Math.min(1,(cy-roofY)/70));
+      if(travel>0.5&&pierce>0&&pierce<1){
+        const pg=ctx.createLinearGradient(0,roofY-26,0,roofY+26);
+        pg.addColorStop(0,"transparent");
+        pg.addColorStop(0.5,color+Math.round((1-pierce)*190).toString(16).padStart(2,"0"));
+        pg.addColorStop(1,"transparent");
+        ctx.fillStyle=pg; ctx.fillRect(0,roofY-26,W,52);
+        ctx.beginPath();
+        ctx.ellipse(W*0.5,roofY,46*(1-pierce*0.4),13*(1-pierce*0.4),0,0,Math.PI*2);
+        ctx.fillStyle="rgba(255,255,255,"+((1-pierce)*0.8)+")"; ctx.fill();
       }
 
       // The star itself, then the stone it becomes.
@@ -1290,6 +1260,12 @@ function StarJourney({color,icon,from,onDone}){
           ctx.fillStyle=hg;ctx.fill();
         }
       }
+
+      // Dissolve the overlay over the last stretch: a hard cut at the end reads
+      // as a freeze, a fade hands over to the temple cleanly.
+      // Begins only once the stone has fully set, and runs to the very last
+      // frame - any gap between the two shows up as a pause.
+      if(p>0.86) canvas.style.opacity=String(Math.max(0,Math.pow((1-p)/0.14,0.7)));
 
       if(p<1) rafRef.current=requestAnimationFrame(frame);
       else onDone&&onDone();
@@ -1889,6 +1865,9 @@ export default function Maestro(){
   const [showKeys,setShowKeys]=useState(false);
   const [showLog,setShowLog]=useState(false);
   const [journey,setJourney]=useState(null);
+  // Stays true for as long as the temple screen is open, so the animation
+  // properties below never change value mid-flight and retrigger themselves.
+  const [enteredByStar,setEnteredByStar]=useState(false);
   const [autoSpoken,setAutoSpoken]=useState(false);
   const [rating,setRating]=useState(null);
   const [darkMode,setDarkMode]=useState(false);
@@ -1934,9 +1913,11 @@ export default function Maestro(){
     setSelectedCategory(cat); setSearch(""); setViewHistory(false);
     if(origin){
       // A star was tapped: play the descent, then reveal the temple.
+      setEnteredByStar(true);
       setJourney({color:cat.sectionColor||"#00cfff",icon:cat.icon||"✦",from:origin});
       setScreen("describe");
     } else {
+      setEnteredByStar(false);
       setScreen("describe");
     }
   };
@@ -1987,7 +1968,7 @@ export default function Maestro(){
   };
 
   const toggleStep=i=>setCompletedSteps(prev=>prev.includes(i)?prev.filter(s=>s!==i):[...prev,i]);
-  const reset=()=>{setScreen("home");setSelectedCategory(null);setProblem("");setGuide(null);setCompletedSteps([]);setViewHistory(false);setSearch("");};
+  const reset=()=>{setScreen("home");setSelectedCategory(null);setProblem("");setGuide(null);setCompletedSteps([]);setViewHistory(false);setSearch("");setEnteredByStar(false);setJourney(null);};
   const openHistoryItem=item=>{setSelectedCategory(item.category);setGuide(item.guide);setCompletedSteps([]);setViewHistory(false);setScreen("guide");};
 
   const diffColor={Facil:"#57cc99",Moderado:"#f4a261",Dificil:"#ff6b6b",Experto:"#f72585"};
@@ -2158,7 +2139,7 @@ export default function Maestro(){
         {screen==="describe"&&(
           <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",
                        minHeight:"calc(100vh - 150px)",
-                       animation:journey?"templeRise 6.4s cubic-bezier(.16,.85,.28,1) both":"fadeIn 0.35s ease"}}>
+                       animation:enteredByStar?"templeRise 3.4s cubic-bezier(.16,.85,.28,1) both":"fadeIn 0.35s ease"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
               <div style={{width:46,height:46,filter:`drop-shadow(0 0 10px ${accentColor})`}}>
                 {selectedCategory&&ICONS[selectedCategory.id]&&<CyberIcon d={ICONS[selectedCategory.id].d} d2={ICONS[selectedCategory.id].d2} color={accentColor} size={32} gradId={`desc_${selectedCategory.id}`}/>}
@@ -2168,10 +2149,10 @@ export default function Maestro(){
                 <h2 style={{fontSize:18,margin:"2px 0 0",fontWeight:"bold",fontFamily:"monospace"}}>Describe tu problema</h2>
               </div>
             </div>
-            <ColumnFrame color={accentColor} altarDelay={journey?5900:0}>
-            <div style={{background:"transparent",border:"none",borderRadius:0,padding:"4px 2px",display:"flex",flexDirection:"column",gap:7}}>
+            <ColumnFrame color={accentColor} altarDelay={enteredByStar?3960:0}>
+            <div style={{background:"transparent",border:"none",borderRadius:0,padding:0,display:"flex",flexDirection:"column",gap:6,height:"100%"}}>
               <div style={{position:"relative"}}>
-                <textarea style={{width:"100%",background:"transparent",border:"none",outline:"none",color:"#e8e2d2",fontSize:14,padding:"4px 6px",fontFamily:"Georgia,serif",resize:"none",boxSizing:"border-box",lineHeight:1.5,textShadow:`0 0 10px ${accentColor}66, 0 1px 0 rgba(0,0,0,.8)`}} placeholder="Describe el problema... o pulsa 🎤" value={problem} onChange={e=>setProblem(e.target.value)} rows={2}/>
+                <textarea style={{width:"100%",background:"transparent",border:"none",outline:"none",color:"#e8e2d2",fontSize:14,padding:"4px 6px",fontFamily:"Georgia,serif",resize:"none",boxSizing:"border-box",lineHeight:1.45,height:"100%",overflowY:"auto",textShadow:`0 0 10px ${accentColor}66, 0 1px 0 rgba(0,0,0,.8)`}} placeholder="Describe el problema... o pulsa 🎤" value={problem} onChange={e=>setProblem(e.target.value)} rows={2}/>
                 <button onClick={()=>listening?stopListening():startListening(t=>setProblem(p=>p?p+" "+t:t))} style={{position:"absolute",top:10,right:10,width:34,height:34,borderRadius:"50%",border:`2px solid ${listening?"#ff6b6b":"rgba(0,180,255,0.4)"}`,background:listening?"rgba(255,80,80,0.2)":"rgba(0,180,255,0.1)",color:listening?"#ff6b6b":"#00cfff",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{listening?"⏹":"🎤"}</button>
               </div>
               <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,opacity:problem.trim()?1:0.4,fontFamily:"monospace"}} onClick={fetchGuide} disabled={!problem.trim()}>
