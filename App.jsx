@@ -42,8 +42,8 @@ import React, { useState } from "react";
 })();
 
 const LOW_MEM = (typeof navigator !== "undefined" &&
-  ((navigator.deviceMemory && navigator.deviceMemory <= 2) ||
-   (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)));
+  ((navigator.deviceMemory && navigator.deviceMemory <= 1) ||
+   (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2)));
 function pixelRatio(){
   const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
   return LOW_MEM ? 1 : Math.min(dpr, 2);
@@ -1148,7 +1148,7 @@ function StarField({section,color,icon,label,onBack,onSelect}){
     let t=0,lastTime=performance.now(),lastFrame=0;
     const loop=(now)=>{
       rafRef.current=requestAnimationFrame(loop);
-      if(now-lastFrame<(window.__maestroSpeaking?200:(LOW_MEM?50:33))) return;
+      if(now-lastFrame<(window.__maestroSpeaking?200:(LOW_MEM?40:16))) return;
       lastFrame=now;
       const dt=Math.min((now-lastTime)/1000,0.06);
       lastTime=now; t+=dt;
@@ -1405,7 +1405,7 @@ function OrbitalHome({onSelect}){
     const loop=(now)=>{
       rafRef.current=requestAnimationFrame(loop);
       // Cap at ~30fps to leave CPU headroom for the audio scheduler
-      if(now-lastFrame<(window.__maestroSpeaking?200:(LOW_MEM?50:33))) return;
+      if(now-lastFrame<(window.__maestroSpeaking?200:(LOW_MEM?40:16))) return;
       lastFrame=now;
       const dt=Math.min((now-lastTime)/1000,0.06);
       lastTime=now; t+=dt;
