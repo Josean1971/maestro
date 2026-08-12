@@ -3,6 +3,44 @@ import React, { useState } from "react";
 // Low-memory devices (1-2 GB tablets) run out of GPU memory when canvases are
 // rendered at full device pixel ratio, which kills the app on launch when it
 // is installed as a standalone PWA. Cap the ratio on weak hardware.
+
+// ---------------------------------------------------------------------------
+// Crash recorder. When the app is launched as an installed PWA it can die
+// before anything is visible, so errors are written to localStorage and can be
+// reviewed later from a normal browser tab (see the gear menu).
+// ---------------------------------------------------------------------------
+(function installCrashLogger(){
+  if (typeof window === "undefined" || window.__maestroLogger) return;
+  window.__maestroLogger = true;
+  const write = (entry) => {
+    try {
+      const log = JSON.parse(localStorage.getItem("maestro_crashlog") || "[]");
+      log.unshift(entry);
+      localStorage.setItem("maestro_crashlog", JSON.stringify(log.slice(0, 12)));
+    } catch (e) {}
+  };
+  const ctx = () => ({
+    when: new Date().toLocaleString(),
+    mode: window.matchMedia && window.matchMedia("(display-mode: standalone)").matches
+            ? "app instalada" : "navegador",
+    screen: window.innerWidth + "x" + window.innerHeight,
+    dpr: window.devicePixelRatio || 1,
+    mem: (navigator.deviceMemory || "?") + "GB",
+    cores: navigator.hardwareConcurrency || "?",
+  });
+  window.addEventListener("error", (e) => {
+    write({ ...ctx(), type: "error",
+            msg: String(e.message || e.error || "?"),
+            at: (e.filename || "") + ":" + (e.lineno || 0) });
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    write({ ...ctx(), type: "promesa",
+            msg: String((e.reason && (e.reason.message || e.reason)) || "?"), at: "" });
+  });
+  // Breadcrumb so we can tell "never started" from "started then died"
+  write({ ...ctx(), type: "arranque", msg: "la app comenzo a cargar", at: "" });
+})();
+
 const LOW_MEM = (typeof navigator !== "undefined" &&
   ((navigator.deviceMemory && navigator.deviceMemory <= 2) ||
    (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)));
@@ -1391,6 +1429,7 @@ export default function Maestro(){
     try{localStorage.setItem("maestro_api_keys",JSON.stringify(apiKeys));}catch(e){}
   },[apiKeys]);
   const [showKeys,setShowKeys]=useState(false);
+  const [showLog,setShowLog]=useState(false);
   const [autoSpoken,setAutoSpoken]=useState(false);
   const [rating,setRating]=useState(null);
   const [darkMode,setDarkMode]=useState(false);
@@ -1536,6 +1575,50 @@ export default function Maestro(){
               style={{width:"100%",padding:"8px",marginTop:8,border:"1px solid rgba(255,80,80,0.25)",borderRadius:4,background:"transparent",color:"#a05050",fontFamily:"monospace",fontSize:11,cursor:"pointer"}}>
               Borrar claves guardadas
             </button>
+
+            <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid rgba(0,180,255,0.12)"}}>
+              <button onClick={()=>setShowLog(v=>!v)}
+                style={{width:"100%",padding:"9px",border:"1px solid rgba(0,180,255,0.25)",borderRadius:4,background:"transparent",color:"#00aaee",fontFamily:"monospace",fontSize:11,cursor:"pointer"}}>
+                🩺 {showLog?"Ocultar":"Ver"} registro de diagnóstico
+              </button>
+              {showLog&&(()=>{
+                let log=[];
+                try{log=JSON.parse(localStorage.getItem("maestro_crashlog")||"[]");}catch(e){}
+                return(
+                  <div style={{marginTop:10}}>
+                    <div style={{maxHeight:180,overflowY:"auto",background:"rgba(0,0,0,0.45)",border:"1px solid rgba(0,180,255,0.12)",borderRadius:4,padding:8}}>
+                      {log.length===0
+                        ? <p style={{fontFamily:"monospace",fontSize:10,color:"#556"}}>Sin registros todavía.</p>
+                        : log.map((e,i)=>(
+                            <div key={i} style={{marginBottom:8,paddingBottom:6,borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                              <p style={{margin:0,fontFamily:"monospace",fontSize:9,color:e.type==="arranque"?"#57cc99":"#ff6b6b",fontWeight:"bold"}}>
+                                {e.type==="arranque"?"▶":"⚠"} {e.type} · {e.mode}
+                              </p>
+                              <p style={{margin:"2px 0 0",fontFamily:"monospace",fontSize:9,color:"#9ab",wordBreak:"break-word"}}>{e.msg}</p>
+                              <p style={{margin:"2px 0 0",fontFamily:"monospace",fontSize:8,color:"#556"}}>
+                                {e.when} · {e.screen} · dpr{e.dpr} · {e.mem} · {e.cores} nucleos {e.at?("· "+e.at):""}
+                              </p>
+                            </div>
+                          ))}
+                    </div>
+                    <div style={{display:"flex",gap:6,marginTop:6}}>
+                      <button onClick={()=>{
+                          const txt=JSON.stringify(log,null,1);
+                          if(navigator.clipboard){navigator.clipboard.writeText(txt).then(()=>alert("Registro copiado. Pégalo en el chat."));}
+                          else{alert(txt.slice(0,1500));}
+                        }}
+                        style={{flex:1,padding:"7px",border:"1px solid rgba(0,180,255,0.25)",borderRadius:4,background:"rgba(0,180,255,0.08)",color:"#00cfff",fontFamily:"monospace",fontSize:10,cursor:"pointer"}}>
+                        📋 Copiar registro
+                      </button>
+                      <button onClick={()=>{try{localStorage.removeItem("maestro_crashlog");}catch(e){} setShowLog(false);}}
+                        style={{padding:"7px 12px",border:"1px solid rgba(255,80,80,0.25)",borderRadius:4,background:"transparent",color:"#a05050",fontFamily:"monospace",fontSize:10,cursor:"pointer"}}>
+                        Vaciar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}
