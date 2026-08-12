@@ -1,9 +1,9 @@
 {
-  "id": "/?v=2",
+  "id": "/",
   "name": "MAESTRO",
   "short_name": "MAESTRO",
   "description": "Asistente técnico universal con IA",
-  "start_url": "/?v=2",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "display_override": [
