@@ -49,6 +49,35 @@ function pixelRatio(){
   return LOW_MEM ? 1 : Math.min(dpr, 2);
 }
 
+
+// Turns a guide into a script that sounds like someone explaining it, rather
+// than a list being read out. Punctuation carries the pauses.
+function buildNarration(guide){
+  if(!guide) return "";
+  const bits=[];
+  if(guide.titulo) bits.push(guide.titulo+".");
+  if(guide.dificultad||guide.tiempo){
+    const d=[];
+    if(guide.dificultad) d.push("dificultad "+guide.dificultad.toLowerCase());
+    if(guide.tiempo) d.push("tiempo estimado, "+guide.tiempo);
+    bits.push(d.join(". ")+".");
+  }
+  if(Array.isArray(guide.herramientas)&&guide.herramientas.length){
+    bits.push("Necesitarás: "+guide.herramientas.join(", ")+".");
+  }
+  if(guide.advertencia) bits.push("Atención. "+guide.advertencia);
+  const pasos=Array.isArray(guide.pasos)?guide.pasos:[];
+  pasos.forEach((p,i)=>{
+    bits.push("Paso "+(i+1)+" de "+pasos.length+". "+(p.titulo||"")+".");
+    if(p.descripcion) bits.push(p.descripcion);
+    if(p.consejo) bits.push("Consejo: "+p.consejo);
+  });
+  if(guide.cuando_llamar_profesional){
+    bits.push("Cuándo llamar a un profesional. "+guide.cuando_llamar_profesional);
+  }
+  return bits.join(" ");
+}
+
 function MatrixRain() {
   const canvasRef = React.useRef(null);
   React.useEffect(() => {
@@ -252,6 +281,7 @@ function useSpeech() {
   const [listening, setListening] = React.useState(false);
   const [speaking,  setSpeaking]  = React.useState(false);
   const recogRef = React.useRef(null);
+  const keepAlive = React.useRef(null);
 
   React.useEffect(() => {
     if (window.speechSynthesis) {
@@ -280,26 +310,104 @@ function useSpeech() {
     setListening(false);
   }, []);
 
-  const speak = React.useCallback((text) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const chunks = text.match(/.{1,200}/g) || [text];
-    let i = 0;
-    const next = () => {
-      if (i >= chunks.length) { setSpeaking(false); return; }
-      const utt = new SpeechSynthesisUtterance(chunks[i++]);
-      utt.lang = "es-ES"; utt.rate = 0.95;
-      const v = window.speechSynthesis.getVoices().find(v => v.lang.startsWith("es"));
-      if (v) utt.voice = v;
-      if (i === 1) setSpeaking(true);
-      utt.onend = next; utt.onerror = () => setSpeaking(false);
-      window.speechSynthesis.speak(utt);
+  // --- Text to speech -------------------------------------------------------
+  // Reading long guides aloud needs care: the text has to be split so the
+  // engine never runs out mid-thought, but the pieces must be queued together
+  // or a silent gap appears between them.
+
+  // Pick the most natural Spanish voice available, preferring the neural /
+  // enhanced ones the platform ships over the older robotic defaults.
+  const pickVoice = React.useCallback(() => {
+    const voices = window.speechSynthesis.getVoices().filter(v => /^es/i.test(v.lang));
+    if (!voices.length) return null;
+    const score = (v) => {
+      const n = (v.name || "").toLowerCase();
+      let s = 0;
+      if (/natural|neural|enhanced|premium|wavenet|siri/.test(n)) s += 40;
+      if (/google/.test(n)) s += 25;
+      if (/microsoft|helena|laura|pablo|alvaro|elvira/.test(n)) s += 15;
+      if (/^es-es/i.test(v.lang)) s += 10;      // peninsular Spanish first
+      if (v.localService) s += 5;               // local voices don't stutter
+      if (/compact|eloquence|espeak/.test(n)) s -= 30;
+      return s;
     };
-    next();
+    return voices.sort((a, b) => score(b) - score(a))[0];
   }, []);
 
+  // Break text into speakable pieces: sentences first, then group them so each
+  // piece is long enough to sound continuous but short enough to stay stable.
+  const splitForSpeech = React.useCallback((raw) => {
+    const clean = String(raw)
+      .replace(/[*_`#>\[\]]/g, " ")            // strip markdown noise
+      .replace(/\s*\n+\s*/g, ". ")             // line breaks become pauses
+      .replace(/\.{2,}/g, ".")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    const sentences = clean.match(/[^.!?;:]+[.!?;:]*\s*/g) || [clean];
+    const out = [];
+    let buf = "";
+    for (const s of sentences) {
+      if ((buf + s).length > 230 && buf) { out.push(buf.trim()); buf = s; }
+      else buf += s;
+      // A very long sentence still has to be cut, but only at a word boundary.
+      while (buf.length > 260) {
+        let cut = buf.lastIndexOf(" ", 240);
+        if (cut < 60) cut = 240;
+        out.push(buf.slice(0, cut).trim());
+        buf = buf.slice(cut);
+      }
+    }
+    if (buf.trim()) out.push(buf.trim());
+    return out.filter(Boolean);
+  }, []);
+
+  const speak = React.useCallback((text) => {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    synth.cancel();
+    if (keepAlive.current) { clearInterval(keepAlive.current); keepAlive.current = null; }
+
+    const parts = splitForSpeech(text);
+    if (!parts.length) return;
+    const voice = pickVoice();
+
+    setSpeaking(true);
+
+    parts.forEach((part, idx) => {
+      const utt = new SpeechSynthesisUtterance(part);
+      utt.lang = "es-ES";
+      utt.rate = 1.0;      // natural pace; slower actually sounds more robotic
+      utt.pitch = 1.0;
+      utt.volume = 1.0;
+      if (voice) utt.voice = voice;
+      if (idx === parts.length - 1) {
+        utt.onend = () => {
+          setSpeaking(false);
+          if (keepAlive.current) { clearInterval(keepAlive.current); keepAlive.current = null; }
+        };
+      }
+      utt.onerror = () => {
+        setSpeaking(false);
+        if (keepAlive.current) { clearInterval(keepAlive.current); keepAlive.current = null; }
+      };
+      // Queue everything up front: the engine chains the pieces itself, which
+      // removes the pause a per-piece callback would introduce.
+      synth.speak(utt);
+    });
+
+    // Chrome stops speaking after roughly 15 seconds unless it is nudged.
+    keepAlive.current = setInterval(() => {
+      if (!synth.speaking) {
+        clearInterval(keepAlive.current); keepAlive.current = null; return;
+      }
+      synth.pause(); synth.resume();
+    }, 9000);
+  }, [pickVoice, splitForSpeech]);
+
   const stopSpeaking = React.useCallback(() => {
-    window.speechSynthesis?.cancel(); setSpeaking(false);
+    window.speechSynthesis?.cancel();
+    if (keepAlive.current) { clearInterval(keepAlive.current); keepAlive.current = null; }
+    setSpeaking(false);
   }, []);
 
   return { listening, speaking, startListening, stopListening, speak, stopSpeaking };
@@ -1731,7 +1839,7 @@ export default function Maestro(){
                   <div>
                     <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
                       <h2 style={{fontSize:21,fontWeight:"bold",margin:"0 0 10px",lineHeight:1.3,fontFamily:"monospace",flex:1}}>{guide.titulo}</h2>
-                      <button onClick={()=>speaking?stopSpeaking():speak(guide.pasos?.map((p,i)=>"Paso "+(i+1)+": "+p.titulo+". "+p.descripcion).join(". "))}
+                      <button onClick={()=>speaking?stopSpeaking():speak(buildNarration(guide))}
                         style={{width:36,height:36,borderRadius:"50%",border:`2px solid ${speaking?"#ff6b6b":"rgba(0,180,255,0.3)"}`,background:speaking?"rgba(255,80,80,0.15)":"rgba(0,180,255,0.08)",color:speaking?"#ff6b6b":"#00cfff",fontSize:18,cursor:"pointer",flexShrink:0}}>
                         {speaking?"⏹":"🔊"}
                       </button>
