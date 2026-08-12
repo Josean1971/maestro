@@ -608,7 +608,7 @@ const SECTIONS=[
 const ALL_CATS=SECTIONS.flatMap(s=>s.categories.map(c=>({...c,sectionColor:s.color,sectionLabel:s.label})));
 
 // ── COLUMN FRAME WITH FLOATING CLOUDS ──
-function ColumnFrame({color,children}){
+function ColumnFrame({color,children,altarDelay=0}){
   const [t,setT]=React.useState(0);
   React.useEffect(()=>{
     let raf,last=performance.now();
@@ -927,10 +927,76 @@ function ColumnFrame({color,children}){
           <rect x="300" y="220" width="18" height="5" fill="#050b14" opacity="0.32"/>
         </svg>
 
-        {/* ---- the oracle: the text box, seated inside the sanctuary ---- */}
-        <div style={{position:"absolute",left:"22%",right:"22%",top:"27%",bottom:"12%",
-                     display:"flex",alignItems:"center"}}>
-          <div style={{width:"100%"}}>{children}</div>
+        {/* ---- the oracle: a carved stone altar holding the text ---- */}
+        <div style={{position:"absolute",left:"26%",right:"26%",top:"20%",bottom:"12%",
+                     display:"flex",alignItems:"center",
+                     animation:`altarSettle 1.1s cubic-bezier(.2,1.5,.4,1) ${altarDelay}ms both`}}>
+          <div style={{position:"relative",width:"100%"}}>
+
+            {/* the monolith: a standing slab of carved stone */}
+            <svg viewBox="0 0 200 150" preserveAspectRatio="none"
+                 style={{position:"absolute",inset:"-30px -22px -26px -22px",
+                         width:"calc(100% + 44px)",height:"calc(100% + 56px)",
+                         display:"block",filter:"drop-shadow(0 10px 26px rgba(0,0,0,.75))",
+                         animation:`altarReveal .01s linear ${altarDelay}ms both`}}>
+              <defs>
+                <linearGradient id="monoFace" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   stopColor="#55524a"/>
+                  <stop offset="14%"  stopColor="#9a9587"/>
+                  <stop offset="38%"  stopColor="#cdc8b7"/>
+                  <stop offset="58%"  stopColor="#b0ab9c"/>
+                  <stop offset="82%"  stopColor="#7d7a6f"/>
+                  <stop offset="100%" stopColor="#4a4842"/>
+                </linearGradient>
+                <linearGradient id="monoSide" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   stopColor="#3d3b36"/>
+                  <stop offset="100%" stopColor="#615e56"/>
+                </linearGradient>
+                <linearGradient id="monoCap" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%"   stopColor="#e8e2d2"/>
+                  <stop offset="100%" stopColor="#a9a496"/>
+                </linearGradient>
+                <filter id="monoRough" x="-8%" y="-8%" width="116%" height="116%">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.6 0.85" numOctaves="5" seed="31" result="n"/>
+                  <feDisplacementMap in="SourceGraphic" in2="n" scale="2.1"
+                                     xChannelSelector="R" yChannelSelector="G"/>
+                </filter>
+              </defs>
+
+              <g filter="url(#monoRough)">
+                {/* the shaft: slightly tapered, wider at the base */}
+                <path d="M28,10 L172,10 L178,132 L22,132 Z" fill="url(#monoFace)"/>
+                {/* right edge catching less light, giving it thickness */}
+                <path d="M172,10 L184,16 L189,130 L178,132 Z" fill="url(#monoSide)"/>
+                {/* broken, uneven crown */}
+                <path d="M28,10 L46,5 L62,11 L84,3 L104,9 L126,4 L148,11 L172,6 L172,10 L28,10 Z"
+                      fill="url(#monoCap)"/>
+                {/* plinth */}
+                <path d="M14,132 L190,132 L194,142 L10,142 Z" fill="url(#monoCap)" opacity="0.9"/>
+                <path d="M10,142 L194,142 L198,150 L6,150 Z" fill="url(#monoFace)" opacity="0.85"/>
+              </g>
+
+              {/* the inscription panel, cut into the face */}
+              <rect x="40" y="26" width="120" height="94" fill="#080d14" opacity="0.62"/>
+              <path d="M40,120 L40,26 L160,26" fill="none" stroke="#4f4c45" strokeWidth="1.8" opacity="0.85"/>
+              <path d="M160,26 L162,120 L40,120" fill="none" stroke="#ded8c7" strokeWidth="1.2" opacity="0.4"/>
+              <rect x="40" y="26" width="120" height="94" fill={color} opacity="0.1"/>
+
+              {/* carved ornament above the panel */}
+              <circle cx="100" cy="19" r="4.5" fill="none" stroke="#8a867a" strokeWidth="1.2" opacity="0.75"/>
+              <path d="M92,19 L74,19 M108,19 L126,19" stroke="#8a867a" strokeWidth="1.1" opacity="0.6"/>
+
+              {/* age: chips, cracks, missing corners */}
+              <path d="M22,132 L34,126 L24,118 Z" fill="#050b14" opacity="0.5"/>
+              <path d="M178,60 L170,66 L179,73 Z" fill="#050b14" opacity="0.42"/>
+              <path d="M56,10 L60,32 L52,54 L58,78 L50,104" fill="none" stroke="#3e3c36" strokeWidth="0.9" opacity="0.45"/>
+              <path d="M150,120 L144,132 L152,142" fill="none" stroke="#3e3c36" strokeWidth="0.8" opacity="0.4"/>
+              <path d="M100,132 L98,142" stroke="#3e3c36" strokeWidth="0.7" opacity="0.3"/>
+            </svg>
+
+            {/* the writing itself */}
+            <div style={{position:"relative"}}>{children}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -957,6 +1023,284 @@ function drawWrappedLabel(ctx,text,cx,topY,canvasW,maxLineW){
     const x=Math.max(halfW+4,Math.min(canvasW-halfW-4,cx));
     ctx.fillText(ln,x,topY+i*lh);
   });
+}
+
+
+// ---------------------------------------------------------------------------
+// StarJourney: the chosen star leaves its constellation, descends toward the
+// temple, sinks through the roof and settles as the oracle's altar. The temple
+// fades up underneath as it travels, so the two screens feel continuous.
+// ---------------------------------------------------------------------------
+function StarJourney({color,icon,from,onDone}){
+  const canvasRef=React.useRef(null);
+  const rafRef=React.useRef(null);
+  const DURATION=8000;
+
+  React.useEffect(()=>{
+    const canvas=canvasRef.current;
+    if(!canvas) return;
+    const ctx=canvas.getContext("2d");
+    const dpr=pixelRatio();
+    const W=window.innerWidth, H=window.innerHeight;
+    canvas.width=W*dpr; canvas.height=H*dpr; ctx.scale(dpr,dpr);
+
+    // Where the star was, and where the altar waits.
+    const x0=from?.px ?? W*0.5;
+    const y0=from?.py ?? H*0.25;
+    const r0=from?.radius ?? 28;
+    const spin0=from?.spin ?? 0;
+    const tw0=from?.twinkle ?? 0;
+    const x1=W*0.5, y1=H*0.62;
+    // Arc: pull upward first, as if the star breaks orbit before diving.
+    const cxp=x0+(x1-x0)*0.34, cyp=Math.min(y0,y1)-H*0.20;
+    const bez=(a,b,c,k)=>{const m=1-k;return m*m*a+2*m*k*b+k*k*c;};
+    const easeInOut=(v)=>v<0.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2;
+    // Gravity: barely moves at first, then accelerates, braking only at the end.
+    const fall=(v)=>{
+      const a=Math.pow(v,2.4);                 // acceleration
+      const b=1-Math.pow(1-v,3.2);             // late braking
+      return a*(1-v)+b*v;
+    };
+
+    // The same sun renderer the constellation uses, so it is visibly the
+    // same object continuing its motion.
+    const drawSun=(cx,cy,r,spin,tw,t,alpha,rayScale)=>{
+      const puls=0.9+Math.sin(tw)*0.1;
+      ctx.save(); ctx.translate(cx,cy);
+      const hex=(v)=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0");
+
+      const corona=ctx.createRadialGradient(0,0,r*0.5,0,0,r*3.4);
+      corona.addColorStop(0,color+hex(90*alpha*puls));
+      corona.addColorStop(0.35,color+hex(40*alpha));
+      corona.addColorStop(1,"transparent");
+      ctx.beginPath();ctx.arc(0,0,r*3.4,0,Math.PI*2);ctx.fillStyle=corona;ctx.fill();
+
+      ctx.save(); ctx.rotate(spin+t*0.35);
+      for(let i=0;i<16;i++){
+        const a=(i/16)*Math.PI*2, long=i%2===0;
+        const len=r*(long?2.9:1.9)*puls*rayScale;
+        const w=r*(long?0.16:0.10);
+        const rg=ctx.createLinearGradient(Math.cos(a)*r*0.85,Math.sin(a)*r*0.85,Math.cos(a)*len,Math.sin(a)*len);
+        rg.addColorStop(0,"rgba(255,255,255,"+(0.75*alpha)+")");
+        rg.addColorStop(0.3,color+hex(190*alpha));
+        rg.addColorStop(1,"transparent");
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a)*r*0.8-Math.sin(a)*w, Math.sin(a)*r*0.8+Math.cos(a)*w);
+        ctx.lineTo(Math.cos(a)*len, Math.sin(a)*len);
+        ctx.lineTo(Math.cos(a)*r*0.8+Math.sin(a)*w, Math.sin(a)*r*0.8-Math.cos(a)*w);
+        ctx.closePath(); ctx.fillStyle=rg; ctx.fill();
+      }
+      ctx.restore();
+
+      const disc=ctx.createRadialGradient(-r*0.22,-r*0.22,r*0.03,0,0,r);
+      disc.addColorStop(0,"rgba(255,255,255,"+(0.98*alpha)+")");
+      disc.addColorStop(0.25,"rgba(255,250,220,"+(0.92*alpha)+")");
+      disc.addColorStop(0.5,color+hex(240*alpha));
+      disc.addColorStop(0.85,color+hex(170*alpha));
+      disc.addColorStop(1,"rgba(0,0,0,"+(0.32*alpha)+")");
+      ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=disc;ctx.fill();
+
+      ctx.beginPath();ctx.arc(0,0,r*0.99,0,Math.PI*2);
+      ctx.strokeStyle="rgba(255,255,255,"+(0.55*alpha)+")";
+      ctx.lineWidth=Math.max(0.9,r*0.07); ctx.stroke();
+      ctx.restore();
+    };
+
+    // Stone block the star collapses into.
+    const drawStone=(cx,cy,r,k)=>{
+      ctx.save(); ctx.translate(cx,cy);
+      const g=ctx.createRadialGradient(-r*0.3,-r*0.35,r*0.05,0,0,r*1.1);
+      g.addColorStop(0,"#efe9d9"); g.addColorStop(0.45,"#c4bfae");
+      g.addColorStop(0.8,"#8f8b7e"); g.addColorStop(1,"#5f5e57");
+      ctx.beginPath();
+      for(let i=0;i<10;i++){
+        const a=(i/10)*Math.PI*2-Math.PI/2;
+        const sr=i%2===0?r:r*0.42;
+        const br=i%2===0?r*0.72:r*0.66;
+        const rr=sr+(br-sr)*k;
+        i===0?ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr):ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);
+      }
+      ctx.closePath();
+      ctx.globalAlpha=k; ctx.fillStyle=g; ctx.fill();
+      ctx.strokeStyle="#6b6a63"; ctx.lineWidth=1.6; ctx.stroke();
+      ctx.globalAlpha=1; ctx.restore();
+    };
+
+    // Debris is generated once so every fragment keeps its own trajectory,
+    // mass and lifetime. Uniform particles read as a graphic; varied ones read
+    // as an explosion.
+    const sparks=Array.from({length:70},(_,i)=>{
+      const a=(i/70)*Math.PI*2+((i*137.5)%360)*Math.PI/180;
+      return {
+        a,
+        v:70+((i*97)%300),          // speed
+        s:1.5+((i*13)%7)*0.9,       // size
+        life:0.55+((i*29)%45)/100,  // how long before it burns out
+        hot:i%4===0,
+        drag:0.55+((i*7)%40)/100,   // heavier bits slow sooner
+        spin:((i*53)%100)/100,
+      };
+    });
+    // Chunks of stone thrown clear of the impact.
+    const shards=Array.from({length:14},(_,i)=>({
+      a:-Math.PI/2+(i/14-0.5)*2.4,
+      v:120+((i*71)%160),
+      s:4+((i*11)%6),
+      rot:((i*47)%360),
+    }));
+    // Smoke that lingers after the light has gone.
+    const smoke=Array.from({length:12},(_,i)=>({
+      a:(i/12)*Math.PI*2,
+      d:20+((i*37)%70),
+      r:18+((i*23)%30),
+      rise:30+((i*17)%40),
+    }));
+
+    const t0=performance.now();
+    const frame=(now)=>{
+      const p=Math.min(1,(now-t0)/DURATION);
+      const t=(now-t0)/1000;
+
+      // 0.00-0.14  the star breaks free and hangs
+      // 0.14-0.62  it falls, gathering speed the whole way
+      // 0.62-0.72  impact
+      // 0.72-1.00  the glow dies and the stone sets
+      const travel=fall(Math.min(1,Math.max(0,(p-0.14)/0.48)));
+      const impact=Math.max(0,Math.min(1,(p-0.62)/0.16));
+      const settle=Math.max(0,Math.min(1,(p-0.74)/0.26));
+
+      // charge-up: while still in place the star pulses and trembles
+      const charge=Math.max(0,Math.min(1,p/0.14));
+      const shiver=charge<1 ? Math.sin(t*26)*2.2*charge : 0;
+      const cx=bez(x0,cxp,x1,travel)+shiver;
+      const cy=bez(y0,cyp,y1,travel)+Math.cos(t*22)*1.6*(charge<1?charge:0);
+      // Size holds, then flares on impact, then compacts into stone.
+      const r=r0*(1+charge*0.32+impact*0.9-settle*0.5);
+      const spin=spin0+Math.pow(travel,1.6)*11;
+      const tw=tw0+t*2.4;
+
+      ctx.clearRect(0,0,W,H);
+
+      // Trail: ghosts of the path just travelled.
+      if(travel>0.02&&travel<1){
+        for(let i=1;i<=8;i++){
+          const k=Math.max(0,travel-i*0.028);
+          drawSun(bez(x0,cxp,x1,k),bez(y0,cyp,y1,k),r0*(1-i*0.07),spin-i*0.35,tw,t,0.11-i*0.012,0.45);
+        }
+      }
+
+      // Impact effects
+      if(impact>0){
+        // A flash has to spike and vanish. Ramping it linearly just looks like
+        // fog, so brightness peaks almost instantly then falls away sharply.
+        const spike=Math.pow(1-impact,2.2);
+        ctx.fillStyle="rgba(255,255,255,"+(spike*0.95)+")";
+        ctx.fillRect(0,0,W,H);
+        // coloured afterglow lingering a little longer
+        const halo=ctx.createRadialGradient(x1,y1,0,x1,y1,Math.max(W,H)*0.75);
+        halo.addColorStop(0,color+Math.round(spike*220).toString(16).padStart(2,"0"));
+        halo.addColorStop(0.4,color+Math.round(spike*90).toString(16).padStart(2,"0"));
+        halo.addColorStop(1,"transparent");
+        ctx.fillStyle=halo; ctx.fillRect(0,0,W,H);
+
+        [0,0.18,0.36].forEach((off)=>{
+          const k=Math.max(0,Math.min(1,(impact-off)/(1-off)));
+          if(k<=0) return;
+          ctx.beginPath();
+          ctx.ellipse(x1,y1,60+k*520,(60+k*520)*0.55,0,0,Math.PI*2);
+          ctx.strokeStyle=k<0.4?"#ffffff":color;
+          ctx.globalAlpha=Math.max(0,Math.pow(1-k,1.6)*0.95);
+          ctx.lineWidth=Math.max(1,10-k*9); ctx.stroke(); ctx.globalAlpha=1;
+        });
+
+        const beam=ctx.createLinearGradient(x1,y1,x1,0);
+        beam.addColorStop(0,color+"cc"); beam.addColorStop(0.45,color+"33");
+        beam.addColorStop(1,"transparent");
+        ctx.globalAlpha=Math.max(0,(1-settle)*0.75);
+        ctx.fillStyle=beam;
+        ctx.fillRect(x1-(70+impact*60),0,(140+impact*120),y1);
+        ctx.globalAlpha=1;
+
+        // --- embers: each one decelerates and falls under its own weight ---
+        sparks.forEach(sp=>{
+          const k=Math.min(1,impact/sp.life);
+          if(k>=1) return;
+          const eased=1-Math.pow(1-k,1/sp.drag);      // fast then slowing
+          const d=eased*sp.v;
+          const px=x1+Math.cos(sp.a)*d;
+          const py=y1+Math.sin(sp.a)*d*0.5 + Math.pow(k,2)*sp.v*0.55;  // gravity
+          const fade=Math.pow(1-k,1.5);
+          const rad=sp.s*(1-k*0.45);
+          // streak behind fast embers
+          if(sp.v>200&&k<0.5){
+            ctx.beginPath();
+            ctx.moveTo(px,py);
+            ctx.lineTo(px-Math.cos(sp.a)*rad*4,py-Math.sin(sp.a)*rad*2);
+            ctx.strokeStyle=sp.hot?"#fff6d8":color;
+            ctx.globalAlpha=fade*0.5; ctx.lineWidth=rad*0.8; ctx.stroke();
+          }
+          ctx.beginPath(); ctx.arc(px,py,rad,0,Math.PI*2);
+          ctx.fillStyle=sp.hot?"#fffbe8":color;
+          ctx.globalAlpha=fade; ctx.fill(); ctx.globalAlpha=1;
+        });
+
+        // --- stone shards tumbling outward ---
+        shards.forEach(sh=>{
+          const k=Math.min(1,impact/0.8);
+          if(k>=1) return;
+          const d=(1-Math.pow(1-k,2.2))*sh.v;
+          const px=x1+Math.cos(sh.a)*d;
+          const py=y1+Math.sin(sh.a)*d*0.6+Math.pow(k,2)*110;
+          ctx.save(); ctx.translate(px,py); ctx.rotate((sh.rot+k*420)*Math.PI/180);
+          ctx.globalAlpha=Math.max(0,1-k*1.1);
+          ctx.fillStyle="#b8b3a4";
+          ctx.fillRect(-sh.s/2,-sh.s/2.6,sh.s,sh.s*0.75);
+          ctx.fillStyle="#6b6a63";
+          ctx.fillRect(-sh.s/2,sh.s*0.1,sh.s,sh.s*0.2);
+          ctx.restore(); ctx.globalAlpha=1;
+        });
+
+        // --- dust cloud billowing out and up ---
+        smoke.forEach(sm=>{
+          const k=Math.min(1,impact/0.95);
+          const d=sm.d+k*80;
+          const px=x1+Math.cos(sm.a)*d;
+          const py=y1+Math.sin(sm.a)*d*0.34-k*sm.rise;
+          const rr=sm.r*(0.4+k*1.5);
+          const g=ctx.createRadialGradient(px,py,0,px,py,rr);
+          const a=Math.max(0,(1-k)*0.28);
+          g.addColorStop(0,"rgba(196,191,174,"+a+")");
+          g.addColorStop(1,"transparent");
+          ctx.beginPath(); ctx.arc(px,py,rr,0,Math.PI*2);
+          ctx.fillStyle=g; ctx.fill();
+        });
+      }
+
+      // The star itself, then the stone it becomes.
+      if(settle<1) drawSun(cx,cy,r,spin,tw,t,1-settle*0.9,1-settle*0.85);
+      if(settle>0){
+        drawStone(cx,cy,r,settle);
+        // residual heat fading out of the freshly formed stone
+        const heat=Math.max(0,1-settle)*0.7;
+        if(heat>0.02){
+          const hg=ctx.createRadialGradient(cx,cy,r*0.2,cx,cy,r*2.2);
+          hg.addColorStop(0,color+Math.round(heat*160).toString(16).padStart(2,"0"));
+          hg.addColorStop(1,"transparent");
+          ctx.beginPath();ctx.arc(cx,cy,r*2.2,0,Math.PI*2);
+          ctx.fillStyle=hg;ctx.fill();
+        }
+      }
+
+      if(p<1) rafRef.current=requestAnimationFrame(frame);
+      else onDone&&onDone();
+    };
+    rafRef.current=requestAnimationFrame(frame);
+    return()=>cancelAnimationFrame(rafRef.current);
+  },[from,color,onDone]);
+
+  return <canvas ref={canvasRef}
+    style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"none",
+            width:"100vw",height:"100vh"}}/>;
 }
 
 function StarField({section,color,icon,label,onBack,onSelect}){
@@ -1190,7 +1534,26 @@ function StarField({section,color,icon,label,onBack,onSelect}){
 
     const pos=(e)=>{const rc=canvas.getBoundingClientRect();const tc=e.touches?.[0];return tc?[tc.clientX-rc.left,tc.clientY-rc.top]:[e.clientX-rc.left,e.clientY-rc.top];};
     const onMove=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.stars.forEach(s=>{s.hovered=false;const dx=mx-s.x,dy=my-s.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<s.size*1.6&&s.z>-0.3&&d<bd){bd=d;best=s;}});if(best)best.hovered=true;};
-    const onTap=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.stars.forEach(s=>{const dx=mx-s.x,dy=my-s.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<s.size*1.8&&s.z>-0.3&&d<bd){bd=d;best=s;}});if(best)onSelect({...best.cat,sectionColor:color});};
+    const onTap=(e)=>{
+      const[mx,my]=pos(e);
+      let best=null,bd=1e9;
+      stateRef.current.stars.forEach(s=>{const dx=mx-s.x,dy=my-s.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<s.size*1.8&&s.z>-0.3&&d<bd){bd=d;best=s;}});
+      if(best){
+        // Hand over the star's real on-screen state - position, drawn radius,
+        // spin and twinkle - so the transition continues the very same star
+        // instead of spawning a new one.
+        const r=canvas.getBoundingClientRect();
+        const origin={
+          px:r.left+best.x,
+          py:r.top+best.y,
+          radius:best.size*best.scale,
+          spin:best.spin,
+          twinkle:best.twinkle,
+          depth:best.depth,
+        };
+        onSelect({...best.cat,sectionColor:color},origin);
+      }
+    };
     const resize=()=>{const d=pixelRatio();W=canvas.offsetWidth;H=canvas.offsetHeight;canvas.width=W*d;canvas.height=H*d;ctx.setTransform(1,0,0,1,0,0);ctx.scale(d,d);};
     window.addEventListener("resize",resize);
     canvas.addEventListener("mousemove",onMove);
@@ -1468,7 +1831,8 @@ function OrbitalHome({onSelect}){
 
   if(subSpheres) return(
     <StarField section={subSpheres} color={selected?.color} icon={selected?.icon}
-      label={selected?.label} onBack={()=>setSubSpheres(null)} onSelect={onSelect}/>
+      label={selected?.label} onBack={()=>setSubSpheres(null)}
+      onSelect={(cat,origin)=>onSelect({...cat,icon:selected?.icon},origin)}/>
   );
 
   return(
@@ -1524,6 +1888,7 @@ export default function Maestro(){
   },[apiKeys]);
   const [showKeys,setShowKeys]=useState(false);
   const [showLog,setShowLog]=useState(false);
+  const [journey,setJourney]=useState(null);
   const [autoSpoken,setAutoSpoken]=useState(false);
   const [rating,setRating]=useState(null);
   const [darkMode,setDarkMode]=useState(false);
@@ -1565,7 +1930,16 @@ export default function Maestro(){
 
   const filtered=search.trim()?ALL_CATS.filter(c=>c.label.toLowerCase().includes(search.toLowerCase())||c.sectionLabel.toLowerCase().includes(search.toLowerCase())):null;
 
-  const handleCategory=(cat)=>{setSelectedCategory(cat);setScreen("describe");setSearch("");setViewHistory(false);};
+  const handleCategory=(cat,origin)=>{
+    setSelectedCategory(cat); setSearch(""); setViewHistory(false);
+    if(origin){
+      // A star was tapped: play the descent, then reveal the temple.
+      setJourney({color:cat.sectionColor||"#00cfff",icon:cat.icon||"✦",from:origin});
+      setScreen("describe");
+    } else {
+      setScreen("describe");
+    }
+  };
 
   const fetchGuide=async()=>{
     if(!problem.trim()) return;
@@ -1782,7 +2156,9 @@ export default function Maestro(){
         )}
 
         {screen==="describe"&&(
-          <div style={{animation:"fadeIn 0.35s ease",display:"flex",flexDirection:"column",justifyContent:"flex-end",minHeight:"calc(100vh - 150px)"}}>
+          <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",
+                       minHeight:"calc(100vh - 150px)",
+                       animation:journey?"templeRise 6.4s cubic-bezier(.16,.85,.28,1) both":"fadeIn 0.35s ease"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
               <div style={{width:46,height:46,filter:`drop-shadow(0 0 10px ${accentColor})`}}>
                 {selectedCategory&&ICONS[selectedCategory.id]&&<CyberIcon d={ICONS[selectedCategory.id].d} d2={ICONS[selectedCategory.id].d2} color={accentColor} size={32} gradId={`desc_${selectedCategory.id}`}/>}
@@ -1792,10 +2168,10 @@ export default function Maestro(){
                 <h2 style={{fontSize:18,margin:"2px 0 0",fontWeight:"bold",fontFamily:"monospace"}}>Describe tu problema</h2>
               </div>
             </div>
-            <ColumnFrame color={accentColor}>
-            <div style={{background:"rgba(4,10,20,0.72)",border:`1px solid ${accentColor}55`,borderRadius:6,padding:10,display:"flex",flexDirection:"column",gap:8,backdropFilter:"blur(3px)",boxShadow:`0 0 26px ${accentColor}33, inset 0 0 18px rgba(0,0,0,0.55)`}}>
+            <ColumnFrame color={accentColor} altarDelay={journey?5900:0}>
+            <div style={{background:"transparent",border:"none",borderRadius:0,padding:"4px 2px",display:"flex",flexDirection:"column",gap:7}}>
               <div style={{position:"relative"}}>
-                <textarea style={{width:"100%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(0,180,255,0.2)",borderRadius:4,color:"#00cfff",fontSize:14,padding:"9px 12px",fontFamily:"monospace",resize:"vertical",boxSizing:"border-box",lineHeight:1.45}} placeholder="Describe el problema... o pulsa 🎤" value={problem} onChange={e=>setProblem(e.target.value)} rows={2}/>
+                <textarea style={{width:"100%",background:"transparent",border:"none",outline:"none",color:"#e8e2d2",fontSize:14,padding:"4px 6px",fontFamily:"Georgia,serif",resize:"none",boxSizing:"border-box",lineHeight:1.5,textShadow:`0 0 10px ${accentColor}66, 0 1px 0 rgba(0,0,0,.8)`}} placeholder="Describe el problema... o pulsa 🎤" value={problem} onChange={e=>setProblem(e.target.value)} rows={2}/>
                 <button onClick={()=>listening?stopListening():startListening(t=>setProblem(p=>p?p+" "+t:t))} style={{position:"absolute",top:10,right:10,width:34,height:34,borderRadius:"50%",border:`2px solid ${listening?"#ff6b6b":"rgba(0,180,255,0.4)"}`,background:listening?"rgba(255,80,80,0.2)":"rgba(0,180,255,0.1)",color:listening?"#ff6b6b":"#00cfff",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{listening?"⏹":"🎤"}</button>
               </div>
               <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,opacity:problem.trim()?1:0.4,fontFamily:"monospace"}} onClick={fetchGuide} disabled={!problem.trim()}>
@@ -1914,7 +2290,20 @@ export default function Maestro(){
         )}
       </main>
 
+      {journey&&(
+        <StarJourney color={journey.color} icon={journey.icon} from={journey.from}
+                     onDone={()=>setJourney(null)}/>
+      )}
       <style>{`
+        @keyframes templeRise{0%{opacity:0;transform:translateY(46px) scale(.94);}55%{opacity:.75;}100%{opacity:1;transform:translateY(0) scale(1);}}
+        @keyframes altarReveal{from{visibility:hidden;}to{visibility:visible;}}
+        @keyframes altarSettle{
+          0%   {opacity:0; transform:translateY(46px) scaleY(.35) scaleX(.85); filter:brightness(3);}
+          30%  {opacity:1; filter:brightness(2.2);}
+          55%  {transform:translateY(-8px) scaleY(1.09) scaleX(1.03); filter:brightness(1.5);}
+          78%  {transform:translateY(2px) scaleY(.98) scaleX(1);}
+          100% {opacity:1; transform:translateY(0) scale(1); filter:brightness(1);}
+        }
         @keyframes fadeIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
         @keyframes spin{to{transform:rotate(360deg);}}
         @keyframes scan{0%,100%{opacity:0;transform:translateX(-100%);}50%{opacity:1;transform:translateX(100%);}}
