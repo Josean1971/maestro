@@ -111,7 +111,8 @@ function MatrixRain() {
     let rafId, lastDraw = 0;
     const animate = (now) => {
       // Throttle rain to ~28fps so it doesn't compete with orbital canvas
-      if (now - lastDraw > 50) { draw(); lastDraw = now; }
+      const gap = window.__maestroSpeaking ? 250 : 50;
+      if (now - lastDraw > gap) { draw(); lastDraw = now; }
       rafId = requestAnimationFrame(animate);
     };
     rafId = requestAnimationFrame(animate);
@@ -347,12 +348,12 @@ function useSpeech() {
     const out = [];
     let buf = "";
     for (const s of sentences) {
-      if ((buf + s).length > 230 && buf) { out.push(buf.trim()); buf = s; }
+      if ((buf + s).length > 480 && buf) { out.push(buf.trim()); buf = s; }
       else buf += s;
       // A very long sentence still has to be cut, but only at a word boundary.
-      while (buf.length > 260) {
-        let cut = buf.lastIndexOf(" ", 240);
-        if (cut < 60) cut = 240;
+      while (buf.length > 520) {
+        let cut = buf.lastIndexOf(" ", 500);
+        if (cut < 60) cut = 500;
         out.push(buf.slice(0, cut).trim());
         buf = buf.slice(cut);
       }
@@ -365,13 +366,15 @@ function useSpeech() {
     const synth = window.speechSynthesis;
     if (!synth) return;
     synth.cancel();
-    if (keepAlive.current) { clearInterval(keepAlive.current); keepAlive.current = null; }
 
     const parts = splitForSpeech(text);
     if (!parts.length) return;
     const voice = pickVoice();
 
     setSpeaking(true);
+    // Heavy canvas work starves the speech engine on low-end devices, so the
+    // animations are asked to idle while the guide is being read aloud.
+    try { window.__maestroSpeaking = true; } catch(e) {}
 
     parts.forEach((part, idx) => {
       const utt = new SpeechSynthesisUtterance(part);
@@ -383,30 +386,25 @@ function useSpeech() {
       if (idx === parts.length - 1) {
         utt.onend = () => {
           setSpeaking(false);
-          if (keepAlive.current) { clearInterval(keepAlive.current); keepAlive.current = null; }
+          try { window.__maestroSpeaking = false; } catch(e) {}
         };
       }
       utt.onerror = () => {
         setSpeaking(false);
-        if (keepAlive.current) { clearInterval(keepAlive.current); keepAlive.current = null; }
+        try { window.__maestroSpeaking = false; } catch(e) {}
       };
       // Queue everything up front: the engine chains the pieces itself, which
       // removes the pause a per-piece callback would introduce.
       synth.speak(utt);
     });
 
-    // Chrome stops speaking after roughly 15 seconds unless it is nudged.
-    keepAlive.current = setInterval(() => {
-      if (!synth.speaking) {
-        clearInterval(keepAlive.current); keepAlive.current = null; return;
-      }
-      synth.pause(); synth.resume();
-    }, 9000);
+    // No pause/resume keep-alive here: that trick fixes desktop Chrome but on
+    // Android it interrupts playback, which is worse than the problem.
   }, [pickVoice, splitForSpeech]);
 
   const stopSpeaking = React.useCallback(() => {
     window.speechSynthesis?.cancel();
-    if (keepAlive.current) { clearInterval(keepAlive.current); keepAlive.current = null; }
+    try { window.__maestroSpeaking = false; } catch(e) {}
     setSpeaking(false);
   }, []);
 
@@ -1150,7 +1148,7 @@ function StarField({section,color,icon,label,onBack,onSelect}){
     let t=0,lastTime=performance.now(),lastFrame=0;
     const loop=(now)=>{
       rafRef.current=requestAnimationFrame(loop);
-      if(now-lastFrame<(LOW_MEM?50:33)) return;
+      if(now-lastFrame<(window.__maestroSpeaking?200:(LOW_MEM?50:33))) return;
       lastFrame=now;
       const dt=Math.min((now-lastTime)/1000,0.06);
       lastTime=now; t+=dt;
@@ -1407,7 +1405,7 @@ function OrbitalHome({onSelect}){
     const loop=(now)=>{
       rafRef.current=requestAnimationFrame(loop);
       // Cap at ~30fps to leave CPU headroom for the audio scheduler
-      if(now-lastFrame<(LOW_MEM?50:33)) return;
+      if(now-lastFrame<(window.__maestroSpeaking?200:(LOW_MEM?50:33))) return;
       lastFrame=now;
       const dt=Math.min((now-lastTime)/1000,0.06);
       lastTime=now; t+=dt;
