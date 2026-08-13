@@ -751,12 +751,12 @@ function ColumnFrame({color,children,altarDelay=0}){
           <rect x="0" y="0" width="400" height="110" fill="url(#openSky)"/>
           <g fill="url(#skyCloud)" filter="url(#skyFar)">
             {SKY_CLOUDS.map(([bx,by,s,sp,op],i)=>(
-              <Cloud key={"sb"+i} x={((bx+t*sp*1.6)%150)*400/150-50} y={by+Math.sin(t*0.28+i)*2.2} s={s*1.35} op={op*0.5}/>
+              <Cloud key={"sb"+i} x={((bx+t*sp*1.6)%230)*640/230-120} y={by+Math.sin(t*0.28+i)*2.2} s={s*1.35} op={op*0.5}/>
             ))}
           </g>
           <g fill="url(#skyCloud)" filter="url(#skyNear)">
             {SKY_CLOUDS.map(([bx,by,s,sp,op],i)=>(
-              <Cloud key={"sf"+i} x={((bx+t*sp*2.6)%150)*400/150-50} y={by+Math.sin(t*0.36+i)*3} s={s} op={op}/>
+              <Cloud key={"sf"+i} x={((bx+t*sp*2.6)%230)*640/230-120} y={by+Math.sin(t*0.36+i)*3} s={s} op={op}/>
             ))}
           </g>
         </svg>
@@ -878,7 +878,7 @@ function ColumnFrame({color,children,altarDelay=0}){
           <g fill="url(#templeCloud)" filter="url(#templeCloudSoft)">
             {SKY_CLOUDS.slice(0,5).map(([bx,by,s,sp],i)=>(
               <Cloud key={"tb"+i}
-                     x={((bx+t*sp*2.2)%150)*400/150-50}
+                     x={((bx+t*sp*2.2)%230)*640/230-120}
                      y={4+ (by%22)*0.6 + Math.sin(t*0.42+i)*1.8}
                      s={s*0.62} op={0.30}/>
             ))}
@@ -886,7 +886,7 @@ function ColumnFrame({color,children,altarDelay=0}){
           <g fill="url(#templeCloud)" filter="url(#templeCloudSharp)">
             {SKY_CLOUDS.slice(2,6).map(([bx,by,s,sp],i)=>(
               <Cloud key={"tf"+i}
-                     x={((bx*1.4+t*sp*3.4)%150)*400/150-50}
+                     x={((bx*1.4+t*sp*3.4)%230)*640/230-120}
                      y={9+ (by%16)*0.5 + Math.sin(t*0.55+i)*2.2}
                      s={s*0.46} op={0.42}/>
             ))}
@@ -1484,7 +1484,14 @@ function StarField({section,color,icon,label,onBack,onSelect}){
         s.z=pz2;
         s.depth=persp;
         s.size=Math.min(W,H)*0.039*Math.pow(persp,2.2);
-        s.scale+=((s.hovered?1.45:1)-s.scale)*Math.min(1,dt*9);
+        // Spring rather than a plain approach: a real object overshoots slightly
+        // and settles, which reads as alive; linear interpolation reads as a slide.
+        {
+          const target=s.hovered?1.45:1;
+          s.vel=(s.vel||0)+(target-s.scale)*60*dt;
+          s.vel*=Math.pow(0.004,dt);
+          s.scale+=s.vel*dt;
+        }
         s.twinkle+=dt*2.2; s.spin+=dt*0.5;
       });
 
@@ -1540,7 +1547,7 @@ function StarField({section,color,icon,label,onBack,onSelect}){
   },[section,color,icon]);
 
   return(
-    <div style={{position:"relative",width:"100%",height:"calc(100vh - 70px)",animation:"fadeIn 0.35s ease"}}>
+    <div style={{position:"relative",width:"100%",height:"calc(100vh - 70px)",animation:"fadeIn .45s var(--ease-out) both"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"4px 4px 0"}}>
         <button onClick={onBack} style={{background:"rgba(0,8,20,0.8)",border:"1px solid "+color+"44",color:color,padding:"5px 12px",borderRadius:4,cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>← VOLVER</button>
         <span style={{fontFamily:"monospace",fontSize:12,color:color,textShadow:"0 0 8px "+color,letterSpacing:"0.1em"}}>{icon} {label}</span>
@@ -1765,7 +1772,12 @@ function OrbitalHome({onSelect}){
         o.z=pz2;
         o.depth=persp;                       // ~0.7 (back) .. ~1.6 (front)
         o.size=Math.min(W,H)*0.045*Math.pow(persp,2.2);
-        o.scale+=(((o.hovered?1.3:1))-o.scale)*Math.min(1,dt*9);
+        {
+          const target=o.hovered?1.3:1;
+          o.vel=(o.vel||0)+(target-o.scale)*60*dt;
+          o.vel*=Math.pow(0.004,dt);
+          o.scale+=o.vel*dt;
+        }
       });
 
       // Painter's algorithm — draw far orbs first
@@ -1823,16 +1835,16 @@ function CatCard({cat,color,onClick}){
   const [hov,setHov]=useState(false);
   const ico=ICONS[cat.id]||ICONS.otro;
   return(
-    <button style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,padding:"20px 12px 14px",border:`1px solid ${hov?color:"rgba(255,255,255,0.07)"}`,borderRadius:4,cursor:"pointer",transition:"all 0.2s ease",background:hov?"rgba(0,15,0,0.88)":"rgba(0,8,0,0.72)",transform:hov?"translateY(-2px)":"none",position:"relative",overflow:"hidden",boxShadow:hov?`0 0 18px ${color}44, inset 0 0 12px ${color}11`:"none"}}
+    <button style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,padding:"20px 12px 14px",border:`1px solid ${hov?color:"rgba(255,255,255,0.07)"}`,borderRadius:4,cursor:"pointer",transition:"transform .28s var(--ease-spring), box-shadow .3s var(--ease-out), border-color .25s var(--ease-soft), background .25s var(--ease-soft)",background:hov?"rgba(0,15,0,0.88)":"rgba(0,8,0,0.72)",transform:hov?"translateY(-2px)":"none",position:"relative",overflow:"hidden",boxShadow:hov?`0 0 18px ${color}44, inset 0 0 12px ${color}11`:"none"}}
       onClick={onClick} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
       <span style={{position:"absolute",top:0,left:0,width:8,height:8,borderTop:`1px solid ${color}`,borderLeft:`1px solid ${color}`,opacity:hov?1:0.4}}/>
       <span style={{position:"absolute",top:0,right:0,width:8,height:8,borderTop:`1px solid ${color}`,borderRight:`1px solid ${color}`,opacity:hov?1:0.4}}/>
       <span style={{position:"absolute",bottom:0,left:0,width:8,height:8,borderBottom:`1px solid ${color}`,borderLeft:`1px solid ${color}`,opacity:hov?1:0.4}}/>
       <span style={{position:"absolute",bottom:0,right:0,width:8,height:8,borderBottom:`1px solid ${color}`,borderRight:`1px solid ${color}`,opacity:hov?1:0.4}}/>
-      <div style={{width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center",filter:hov?`drop-shadow(0 0 8px ${color})`:"drop-shadow(0 0 2px rgba(255,255,255,0.15))",transition:"filter 0.25s"}}>
+      <div style={{width:40,height:40,display:"flex",alignItems:"center",justifyContent:"center",filter:hov?`drop-shadow(0 0 8px ${color})`:"drop-shadow(0 0 2px rgba(255,255,255,0.15))",transition:"filter .3s var(--ease-out)"}}>
         <CyberIcon d={ico.d} d2={ico.d2} color={color} size={30} gradId={`mg_${cat.id}`}/>
       </div>
-      <span style={{fontSize:11,fontWeight:"700",fontFamily:"monospace",textAlign:"center",color:hov?color:"#c8ffd4",transition:"color 0.2s",letterSpacing:"0.04em",lineHeight:1.3,textShadow:hov?`0 0 8px ${color}`:"0 0 6px rgba(0,255,65,0.3)"}}>
+      <span style={{fontSize:11,fontWeight:"700",fontFamily:"monospace",textAlign:"center",color:hov?color:"#c8ffd4",transition:"color .25s var(--ease-soft)",letterSpacing:"0.04em",lineHeight:1.3,textShadow:hov?`0 0 8px ${color}`:"0 0 6px rgba(0,255,65,0.3)"}}>
         {cat.label.toUpperCase()}
       </span>
     </button>
@@ -1996,7 +2008,7 @@ export default function Maestro(){
             {playing?"◼":"▶"}
           </button>{history.length>0&&<button onClick={()=>{setViewHistory(true);setScreen("home");}} style={{background:"rgba(0,15,0,0.8)",border:"1px solid rgba(0,255,65,0.2)",color:"#00cc33",padding:"6px 14px",borderRadius:4,cursor:"pointer",fontSize:12,fontFamily:"monospace"}}>📋 Historial ({history.length})</button>}
           {(screen!=="home"||viewHistory)&&<button onClick={reset} style={{background:"rgba(0,15,0,0.8)",border:"1px solid rgba(0,255,65,0.2)",color:"#00cc33",padding:"6px 14px",borderRadius:4,cursor:"pointer",fontSize:12,fontFamily:"monospace"}}>← Inicio</button>}
-          <button onClick={()=>playing?stop():start()} style={{background:playing?"rgba(0,255,65,0.12)":"rgba(0,15,0,0.8)",border:`1px solid ${playing?"rgba(0,255,65,0.5)":"rgba(0,255,65,0.2)"}`,color:playing?"#00ff41":"#00cc33",padding:"6px 14px",borderRadius:4,cursor:"pointer",fontSize:13,fontFamily:"monospace",boxShadow:playing?"0 0 10px rgba(0,255,65,0.3)":"none",transition:"all 0.2s"}}>
+          <button onClick={()=>playing?stop():start()} style={{background:playing?"rgba(0,255,65,0.12)":"rgba(0,15,0,0.8)",border:`1px solid ${playing?"rgba(0,255,65,0.5)":"rgba(0,255,65,0.2)"}`,color:playing?"#00ff41":"#00cc33",padding:"6px 14px",borderRadius:4,cursor:"pointer",fontSize:13,fontFamily:"monospace",boxShadow:playing?"0 0 10px rgba(0,255,65,0.3)":"none",transition:"background .25s var(--ease-soft), border-color .25s var(--ease-soft), color .25s var(--ease-soft), box-shadow .3s var(--ease-out)"}}>
             {playing?"◼ AUDIO ON":"▶ AUDIO"}
           </button>
         </div>
@@ -2074,7 +2086,7 @@ export default function Maestro(){
       <main style={{position:"relative",zIndex:1,maxWidth:"100%",width:"100%",margin:"0 auto",padding:"16px 12px 80px",boxSizing:"border-box"}}>
 
         {screen==="home"&&!viewHistory&&(
-          <div style={{animation:"fadeIn 0.35s ease"}}>
+          <div style={{animation:"fadeIn .45s var(--ease-out) both"}}>
             <p style={{fontSize:11,color:"#444",letterSpacing:"0.18em",textTransform:"uppercase",marginBottom:8,fontFamily:"monospace"}}>{"//"} SISTEMA ACTIVO · ASISTENTE TÉCNICO IA</p>
             <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:20}}>
               <h1 style={{fontSize:"clamp(26px,5vw,44px)",fontWeight:"bold",lineHeight:1.15,color:"#eee",margin:0,fontFamily:"monospace",textShadow:"0 0 30px rgba(0,180,255,0.25)",flex:1}}>¿Qué problema<br/>necesitas resolver?</h1>
@@ -2113,7 +2125,7 @@ export default function Maestro(){
         )}
 
         {viewHistory&&(
-          <div style={{animation:"fadeIn 0.35s ease"}}>
+          <div style={{animation:"fadeIn .45s var(--ease-out) both"}}>
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24,flexWrap:"wrap"}}>
               <h2 style={{fontSize:22,fontFamily:"monospace",margin:0}}>📋 Historial</h2>
               <div style={{display:"flex",gap:8,marginLeft:"auto",flexWrap:"wrap"}}>
@@ -2165,7 +2177,7 @@ export default function Maestro(){
         )}
 
         {screen==="guide"&&(
-          <div style={{animation:"fadeIn 0.35s ease"}}>
+          <div style={{animation:"fadeIn .45s var(--ease-out) both"}}>
             {loading&&(
               <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"55vh",gap:16}}>
                 <div style={{width:48,height:48,border:"3px solid rgba(0,255,65,0.1)",borderTop:`3px solid ${accentColor}`,borderRadius:"50%",animation:"spin 0.75s linear infinite"}}/>
@@ -2200,7 +2212,7 @@ export default function Maestro(){
                 </div>
 
                 <div style={{height:4,background:"rgba(0,255,65,0.08)",borderRadius:2,marginBottom:24,overflow:"hidden"}}>
-                  <div style={{height:"100%",borderRadius:2,transition:"width 0.4s ease",background:accentColor,width:`${guide.pasos?(completedSteps.length/guide.pasos.length)*100:0}%`}}/>
+                  <div style={{height:"100%",borderRadius:2,transition:"width .55s var(--ease-out)",background:accentColor,width:`${guide.pasos?(completedSteps.length/guide.pasos.length)*100:0}%`}}/>
                 </div>
 
                 {guide.advertencia&&<div style={{display:"flex",gap:12,background:"rgba(40,0,0,0.88)",border:"1px solid rgba(255,80,80,0.3)",borderRadius:4,padding:"13px 16px",marginBottom:20,alignItems:"flex-start"}}><span>⚠️</span><p style={{margin:0,fontSize:14,color:"#ffb3b3",lineHeight:1.55,fontFamily:"monospace"}}>{guide.advertencia}</p></div>}
@@ -2220,9 +2232,9 @@ export default function Maestro(){
                     const done=completedSteps.includes(i);
                     const query=encodeURIComponent((selectedCategory?.label||"")+" "+paso.titulo);
                     return(
-                      <div key={i} style={{border:`1px solid ${done?accentColor:"rgba(0,255,65,0.12)"}`,borderRadius:4,overflow:"hidden",transition:"all 0.18s",background:done?accentColor+"22":"rgba(0,10,0,0.75)"}}>
+                      <div key={i} style={{border:`1px solid ${done?accentColor:"rgba(0,255,65,0.12)"}`,borderRadius:4,overflow:"hidden",transition:"background .3s var(--ease-soft), border-color .3s var(--ease-soft), color .3s var(--ease-soft)",background:done?accentColor+"22":"rgba(0,10,0,0.75)"}}>
                         <div onClick={()=>toggleStep(i)} style={{display:"flex",gap:14,padding:"15px 17px",cursor:"pointer"}}>
-                          <div style={{width:30,height:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold",fontFamily:"monospace",transition:"all 0.18s",flexShrink:0,marginTop:2,background:done?accentColor:"rgba(0,255,65,0.1)",color:done?"#000":"rgba(0,255,65,0.5)"}}>{done?"✓":i+1}</div>
+                          <div style={{width:30,height:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold",fontFamily:"monospace",transition:"background .3s var(--ease-soft), border-color .3s var(--ease-soft), color .3s var(--ease-soft)",flexShrink:0,marginTop:2,background:done?accentColor:"rgba(0,255,65,0.1)",color:done?"#000":"rgba(0,255,65,0.5)"}}>{done?"✓":i+1}</div>
                           <div style={{flex:1}}>
                             <p style={{fontSize:15,fontWeight:"bold",margin:"0 0 6px",lineHeight:1.3,opacity:done?0.45:1,textDecoration:done?"line-through":"none",fontFamily:"monospace"}}>{paso.titulo}</p>
                             <p style={{fontSize:14,margin:"0 0 8px",color:"#c8ffd4",lineHeight:1.6,fontFamily:"monospace",opacity:done?0.35:0.8}}>{paso.descripcion}</p>
@@ -2277,6 +2289,12 @@ export default function Maestro(){
       )}
       <style>{`
         @keyframes templeRise{0%{opacity:0;transform:translateY(46px) scale(.94);}55%{opacity:.75;}100%{opacity:1;transform:translateY(0) scale(1);}}
+        /* Shared easings: things enter fast and settle slowly, the way weight behaves. */
+        :root{
+          --ease-out:cubic-bezier(.16,1,.3,1);
+          --ease-soft:cubic-bezier(.33,1,.68,1);
+          --ease-spring:cubic-bezier(.34,1.4,.5,1);
+        }
         @keyframes altarReveal{from{visibility:hidden;}to{visibility:visible;}}
         @keyframes altarSettle{
           0%   {opacity:0; transform:translateY(46px) scaleY(.35) scaleX(.85); filter:brightness(3);}
@@ -2285,7 +2303,7 @@ export default function Maestro(){
           78%  {transform:translateY(2px) scaleY(.98) scaleX(1);}
           100% {opacity:1; transform:translateY(0) scale(1); filter:brightness(1);}
         }
-        @keyframes fadeIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(16px) scale(.985);}to{opacity:1;transform:translateY(0) scale(1);}}
         @keyframes spin{to{transform:rotate(360deg);}}
         @keyframes scan{0%,100%{opacity:0;transform:translateX(-100%);}50%{opacity:1;transform:translateX(100%);}}
         textarea:focus,input:focus{outline:none;border-color:rgba(0,255,65,0.5)!important;box-shadow:0 0 10px rgba(0,255,65,0.15)!important;}
