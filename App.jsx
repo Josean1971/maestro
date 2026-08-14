@@ -2242,7 +2242,17 @@ export default function Maestro(){
       } else {
         if(!apiKeys.gemini){setGuide({error:true,msg:"⚠️ Añade tu API Key de Gemini pulsando ⚙️. Es gratis en aistudio.google.com"});return;}
         // Model names change over time; try current ones in order until one works.
-        const GEMINI_MODELS=["gemini-2.5-flash","gemini-2.0-flash","gemini-flash-latest","gemini-2.5-pro"];
+        // Google retires models often, so a fixed list goes stale within months.
+        // These are the current ones; if every single one is rejected as
+        // unavailable, the code below asks the API which models this key can
+        // actually use, so the app repairs itself instead of breaking.
+        let GEMINI_MODELS=["gemini-3.7-flash","gemini-3.6-flash","gemini-flash-latest","gemini-3.5-flash","gemini-2.5-flash"];
+        try{
+          const cached=JSON.parse(localStorage.getItem("maestro_gemini_models")||"null");
+          if(cached&&Array.isArray(cached.list)&&Date.now()-cached.at<7*24*3600*1000){
+            GEMINI_MODELS=cached.list;      // discovered previously, still fresh
+          }
+        }catch(e){}
         let res=null,lastErr="",lastStatus=0;
 
         // Google returns 503 when a model is saturated and 429 when the free
@@ -2274,8 +2284,45 @@ export default function Maestro(){
             if(!TRANSIENT.includes(res.status)) break;   // real problem: stop retrying
           }
           if(res&&res.ok) break;
-          if(lastStatus&&!TRANSIENT.includes(lastStatus)&&lastStatus!==404) break;
+          // "not found", "no longer available", "not supported" all mean this
+          // particular model is gone - move on rather than giving up.
+          const gone=lastStatus===404||/no longer available|not found|not supported|is not available/i.test(lastErr);
+          if(lastStatus&&!TRANSIENT.includes(lastStatus)&&!gone) break;
           setLoadingNote("Probando otro modelo…");
+        }
+
+        // Last resort: ask Google what this key may use, then retry with the
+        // newest suitable model and remember it for next time.
+        if((!res||!res.ok)&&/no longer available|not found|is not available/i.test(lastErr)){
+          try{
+            setLoadingNote("Buscando un modelo disponible…");
+            const lr=await fetch("https://generativelanguage.googleapis.com/v1beta/models?key="+apiKeys.gemini);
+            if(lr.ok){
+              const ld=await lr.json();
+              const usable=(ld.models||[])
+                .filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent"))
+                .map(m=>String(m.name||"").replace(/^models\//,""))
+                .filter(n=>/^gemini-/.test(n)&&!/vision|embedding|aqa|tts|image|audio|robotics|live/i.test(n))
+                // newest first, preferring flash for speed and cost
+                .sort((a,b)=>{
+                  const ver=(v)=>parseFloat((v.match(/gemini-([\d.]+)/)||[])[1]||0);
+                  const flash=(v)=>/flash/.test(v)?1:0;
+                  return (ver(b)-ver(a))||(flash(b)-flash(a));
+                });
+              if(usable.length){
+                try{localStorage.setItem("maestro_gemini_models",JSON.stringify({at:Date.now(),list:usable.slice(0,6)}));}catch(e){}
+                for(const m of usable.slice(0,3)){
+                  res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+apiKeys.gemini,
+                    {method:"POST",headers:{"Content-Type":"application/json"},
+                     body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{parts:[{text:usr}]}],generationConfig:{maxOutputTokens:4000}})});
+                  if(res.ok) break;
+                  const e2=await res.json().catch(()=>({}));
+                  lastStatus=res.status;
+                  lastErr=(e2&&e2.error&&e2.error.message)?e2.error.message:("Error "+res.status);
+                }
+              }
+            }
+          }catch(e){}
         }
         setLoadingNote("");
 
@@ -2387,7 +2434,7 @@ export default function Maestro(){
             <p style={{fontSize:10,color:"#4a5a6a",marginTop:10,fontFamily:"monospace",textAlign:"center",lineHeight:1.5}}>
               🔒 Las claves se guardan solo en este dispositivo.<br/>No se envían a ningún servidor.
             </p>
-            <button onClick={()=>{if(confirm("¿Borrar las claves guardadas en este dispositivo?")){setApiKeys({claude:"",gemini:""});}}}
+            <button onClick={()=>{if(confirm("¿Borrar las claves guardadas en este dispositivo?")){setApiKeys({claude:"",gemini:""});try{localStorage.removeItem("maestro_gemini_models");}catch(e){}}}}
               style={{width:"100%",padding:"8px",marginTop:8,border:"1px solid rgba(255,80,80,0.25)",borderRadius:4,background:"transparent",color:"#a05050",fontFamily:"monospace",fontSize:11,cursor:"pointer"}}>
               Borrar claves guardadas
             </button>
