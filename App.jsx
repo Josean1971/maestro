@@ -460,6 +460,7 @@ const ICONS = {
   limpieza:{d:"M9 3h6l1 6H8L9 3zM8 9l-3 12h14L16 9",d2:"M12 9v4M10 13h4"},
   climatizacion:{d:"M12 2v4M4.93 4.93l2.83 2.83M2 12h4M4.93 19.07l2.83-2.83M12 18v4M19.07 19.07l-2.83-2.83M20 12h-4M19.07 4.93l-2.83 2.83",d2:"M12 8a4 4 0 100 8 4 4 0 000-8z"},
   seguridad_hogar:{d:"M12 2L3 7v6c0 5 4 9 9 11 5-2 9-6 9-11V7L12 2z",d2:"M9 12l2 2 4-4"},
+  oficios:{d:"M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z",d2:"M3 3l4.5 4.5M6 2L4 4l3 3 2-2z"},
   electrodomesticos:{d:"M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z",d2:"M9 8h6M9 12h6M9 16h4"},
   computadoras:{d:"M2 4h20v14H2zM8 20h8M12 18v2",d2:"M6 8h4M6 11h6M6 14h3"},
   redes:{d:"M12 2a2 2 0 100 4 2 2 0 000-4zM4 18a2 2 0 100 4 2 2 0 000-4zM20 18a2 2 0 100 4 2 2 0 000-4z",d2:"M12 6v4M12 10L4 18M12 10l8 8"},
@@ -587,7 +588,7 @@ const ICONS = {
 };
 
 const SECTIONS=[
-  {label:"SISTEMA // HOGAR",color:"#00b4d8",categories:[{id:"plomeria",label:"Plomería"},{id:"electricidad_hogar",label:"Electricidad"},{id:"pintura",label:"Pintura & Paredes"},{id:"carpinteria",label:"Carpintería"},{id:"jardineria",label:"Jardinería"},{id:"limpieza",label:"Limpieza"},{id:"climatizacion",label:"Clima & HVAC"},{id:"seguridad_hogar",label:"Seguridad Hogar"}]},
+  {label:"SISTEMA // HOGAR",color:"#00b4d8",categories:[{id:"plomeria",label:"Plomería"},{id:"electricidad_hogar",label:"Electricidad"},{id:"pintura",label:"Pintura & Paredes"},{id:"carpinteria",label:"Carpintería"},{id:"jardineria",label:"Jardinería"},{id:"limpieza",label:"Limpieza"},{id:"climatizacion",label:"Clima & HVAC"},{id:"seguridad_hogar",label:"Seguridad Hogar"},{id:"oficios",label:"Oficios"}]},
   {label:"MÓDULO // ELECTRÓNICA",color:"#c77dff",categories:[{id:"electrodomesticos",label:"Electrodomésticos"},{id:"computadoras",label:"Computadoras & PC"},{id:"redes",label:"Redes & WiFi"},{id:"celulares",label:"Celulares & Tablets"},{id:"audio_video",label:"Audio & Video"},{id:"impresoras",label:"Impresoras"},{id:"electronica_general",label:"Electrónica General"},{id:"domotica",label:"Smart Home"}]},
   {label:"PROTOCOLO // AUTOMOTRIZ",color:"#f4a261",categories:[{id:"motor",label:"Motor & Transmisión"},{id:"frenos",label:"Frenos & Suspensión"},{id:"electrica_auto",label:"Eléctrica Automotriz"},{id:"carroceria",label:"Carrocería & Pintura"},{id:"ac_auto",label:"A/C Automotriz"},{id:"motos",label:"Motos & Bicicletas"},{id:"neumaticos",label:"Neumáticos & Llantas"},{id:"diagnostico",label:"Diagnóstico OBD"}]},
   {label:"NÚCLEO // INDUSTRIAL",color:"#ff6b6b",categories:[{id:"maquinaria",label:"Maquinaria Industrial"},{id:"hidraulica",label:"Hidráulica & Neumática"},{id:"soldadura",label:"Soldadura & Metales"},{id:"electricidad_industrial",label:"Eléctrica Industrial"},{id:"plc",label:"PLC & Automatización"},{id:"refrigeracion",label:"Refrigeración Ind."},{id:"herramientas",label:"Herramientas & Taller"},{id:"seguridad_industrial",label:"Seguridad Industrial"}]},
