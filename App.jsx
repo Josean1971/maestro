@@ -1880,6 +1880,53 @@ export default function Maestro(){
   // Stays true for as long as the temple screen is open, so the animation
   // properties below never change value mid-flight and retrigger themselves.
   const [enteredByStar,setEnteredByStar]=useState(false);
+  const [histQuery,setHistQuery]=useState("");
+  const [histFilter,setHistFilter]=useState("todas");   // todas | favoritas | seccion
+  const [favourites,setFavourites]=useState(()=>{
+    try{const v=localStorage.getItem("maestro_favs");return v?JSON.parse(v):[];}catch(e){return [];}
+  });
+  React.useEffect(()=>{
+    try{localStorage.setItem("maestro_favs",JSON.stringify(favourites));}catch(e){}
+  },[favourites]);
+  const toggleFav=(id)=>setFavourites(f=>f.includes(id)?f.filter(x=>x!==id):[...f,id]);
+
+  // Searches title, category, section and the words of every step, so a guide
+  // can be found by what it was about and not only by its heading.
+  const filteredHistory=React.useMemo(()=>{
+    const q=histQuery.trim().toLowerCase();
+    const norm=(v)=>String(v||"").toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g,"");   // ignore accents
+    const nq=norm(q);
+    return history.filter(item=>{
+      if(histFilter==="favoritas"&&!favourites.includes(item.id)) return false;
+      if(!nq) return true;
+      const hay=[
+        item.guide?.titulo,
+        item.problem,
+        item.category?.label,
+        item.category?.sectionLabel,
+        ...(item.guide?.pasos||[]).flatMap(p=>[p.titulo,p.descripcion]),
+        ...(item.guide?.herramientas||[]),
+      ].map(norm).join(" ");
+      return hay.includes(nq);
+    });
+  },[history,histQuery,histFilter,favourites]);
+
+  // Highlights the matching fragment inside a line of text.
+  const Highlight=({text})=>{
+    const q=histQuery.trim();
+    if(!q) return <>{text}</>;
+    const norm=(v)=>String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+    const i=norm(text).indexOf(norm(q));
+    if(i<0) return <>{text}</>;
+    return(<>
+      {text.slice(0,i)}
+      <mark style={{background:"rgba(0,207,255,0.28)",color:"#bfefff",
+                    borderRadius:2,padding:"0 2px"}}>{text.slice(i,i+q.length)}</mark>
+      {text.slice(i+q.length)}
+    </>);
+  };
+
   const [autoSpoken,setAutoSpoken]=useState(false);
   const [rating,setRating]=useState(null);
   const [darkMode,setDarkMode]=useState(false);
@@ -1980,7 +2027,7 @@ export default function Maestro(){
   };
 
   const toggleStep=i=>setCompletedSteps(prev=>prev.includes(i)?prev.filter(s=>s!==i):[...prev,i]);
-  const reset=()=>{setScreen("home");setSelectedCategory(null);setProblem("");setGuide(null);setCompletedSteps([]);setViewHistory(false);setSearch("");setEnteredByStar(false);setJourney(null);};
+  const reset=()=>{setScreen("home");setSelectedCategory(null);setProblem("");setGuide(null);setCompletedSteps([]);setViewHistory(false);setSearch("");setEnteredByStar(false);setJourney(null);setHistQuery("");setHistFilter("todas");};
   const openHistoryItem=item=>{setSelectedCategory(item.category);setGuide(item.guide);setCompletedSteps([]);setViewHistory(false);setScreen("guide");};
 
   const diffColor={Facil:"#57cc99",Moderado:"#f4a261",Dificil:"#ff6b6b",Experto:"#f72585"};
@@ -2135,15 +2182,101 @@ export default function Maestro(){
               </div>
             </div>
             {history.length===0?<p style={{color:"#555",fontFamily:"monospace"}}>Sin historial aún.</p>:(
-              <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {history.map(item=>(
-                  <button key={item.id} onClick={()=>openHistoryItem(item)} style={{display:"flex",alignItems:"center",gap:14,background:"rgba(0,12,0,0.85)",border:"1px solid rgba(0,255,65,0.14)",borderRadius:4,padding:"14px 18px",cursor:"pointer",textAlign:"left"}}>
-                    <div style={{width:30,height:30,flexShrink:0}}>{ICONS[item.category.id]&&<CyberIcon d={ICONS[item.category.id].d} d2={ICONS[item.category.id].d2} color={item.category.sectionColor} size={28} gradId={`h_${item.id}`}/>}</div>
-                    <div style={{flex:1}}><p style={{margin:0,fontSize:15,fontWeight:"bold",color:"#eee"}}>{item.guide.titulo}</p><p style={{margin:"4px 0 0",fontSize:12,color:"#666",fontFamily:"monospace"}}>{item.category.label} · {item.date}</p></div>
-                    <span style={{color:"#555",fontSize:18}}>→</span>
-                  </button>
-                ))}
-              </div>
+              <>
+                {/* search bar */}
+                <div style={{position:"relative",marginBottom:12}}>
+                  <input
+                    value={histQuery}
+                    onChange={e=>setHistQuery(e.target.value)}
+                    placeholder="🔍  Buscar en tus guías..."
+                    style={{width:"100%",background:"rgba(0,8,20,0.8)",
+                            border:"1px solid rgba(0,180,255,0.25)",borderRadius:4,
+                            color:"#00cfff",fontSize:14,padding:"11px 76px 11px 16px",
+                            fontFamily:"monospace",boxSizing:"border-box"}}/>
+                  <div style={{position:"absolute",top:"50%",right:8,transform:"translateY(-50%)",
+                               display:"flex",gap:6,alignItems:"center"}}>
+                    {histQuery&&(
+                      <button onClick={()=>setHistQuery("")}
+                        style={{background:"none",border:"none",color:"#556",fontSize:16,
+                                cursor:"pointer",padding:"0 4px"}}>✕</button>
+                    )}
+                    <button
+                      onClick={()=>listening?stopListening():startListening(t=>setHistQuery(t))}
+                      style={{width:30,height:30,borderRadius:"50%",
+                              border:`2px solid ${listening?"#ff6b6b":"rgba(0,180,255,0.4)"}`,
+                              background:listening?"rgba(255,80,80,0.2)":"rgba(0,180,255,0.1)",
+                              color:listening?"#ff6b6b":"#00cfff",fontSize:13,cursor:"pointer"}}>
+                      {listening?"⏹":"🎤"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* filters */}
+                <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+                  {[["todas",`Todas (${history.length})`],
+                    ["favoritas",`★ Favoritas (${favourites.length})`]].map(([v,l])=>(
+                    <button key={v} onClick={()=>setHistFilter(v)}
+                      style={{padding:"5px 12px",borderRadius:20,
+                              border:`1px solid ${histFilter===v?"rgba(0,180,255,0.5)":"rgba(255,255,255,0.1)"}`,
+                              background:histFilter===v?"rgba(0,180,255,0.15)":"transparent",
+                              color:histFilter===v?"#00cfff":"#667",fontSize:11,
+                              fontFamily:"monospace",cursor:"pointer",
+                              transition:"all .25s var(--ease-soft)"}}>{l}</button>
+                  ))}
+                  {histQuery&&(
+                    <span style={{fontFamily:"monospace",fontSize:11,color:"#556",marginLeft:"auto"}}>
+                      {filteredHistory.length} resultado{filteredHistory.length===1?"":"s"}
+                    </span>
+                  )}
+                </div>
+
+                {filteredHistory.length===0?(
+                  <p style={{color:"#556",fontFamily:"monospace",fontSize:13,
+                             textAlign:"center",padding:"28px 0"}}>
+                    {histFilter==="favoritas"&&!histQuery
+                      ? "Aún no has marcado ninguna guía como favorita."
+                      : `Ninguna guía coincide con "${histQuery}".`}
+                  </p>
+                ):(
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {filteredHistory.map(item=>{
+                      const fav=favourites.includes(item.id);
+                      return(
+                        <div key={item.id}
+                          style={{display:"flex",alignItems:"center",gap:12,
+                                  background:"rgba(0,8,20,0.85)",
+                                  border:`1px solid ${fav?"rgba(249,199,79,0.3)":"rgba(0,180,255,0.14)"}`,
+                                  borderRadius:4,padding:"12px 14px",
+                                  transition:"border-color .25s var(--ease-soft)"}}>
+                          <div style={{width:30,height:30,flexShrink:0}}>
+                            {ICONS[item.category.id]&&<CyberIcon d={ICONS[item.category.id].d} d2={ICONS[item.category.id].d2} color={item.category.sectionColor} size={28} gradId={`h_${item.id}`}/>}
+                          </div>
+                          <button onClick={()=>openHistoryItem(item)}
+                            style={{flex:1,minWidth:0,background:"none",border:"none",
+                                    textAlign:"left",cursor:"pointer",padding:0}}>
+                            <p style={{margin:0,fontSize:14,fontWeight:"bold",color:"#eee",
+                                       overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              <Highlight text={item.guide.titulo}/>
+                            </p>
+                            <p style={{margin:"3px 0 0",fontSize:11,color:"#667",fontFamily:"monospace",
+                                       overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              <Highlight text={item.category.label}/> · {item.date}
+                            </p>
+                          </button>
+                          <button onClick={()=>toggleFav(item.id)}
+                            title={fav?"Quitar de favoritas":"Marcar como favorita"}
+                            style={{background:"none",border:"none",cursor:"pointer",
+                                    fontSize:17,color:fav?"#f9c74f":"#3a4450",
+                                    padding:"0 4px",transition:"color .25s var(--ease-soft)"}}>
+                            {fav?"★":"☆"}
+                          </button>
+                          <span style={{color:"#445",fontSize:16}}>→</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
