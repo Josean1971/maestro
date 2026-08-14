@@ -606,6 +606,41 @@ const SECTIONS=[
   {label:"🛡 OMEGA // SUPERVIVENCIA",color:"#ff8c00",categories:[{id:"surv_wilderness",label:"Supervivencia Wilderness"},{id:"surv_urbana",label:"Supervivencia Urbana"},{id:"surv_agua",label:"Obtención de Agua"},{id:"surv_fuego",label:"Fuego & Calor"},{id:"surv_refugio",label:"Construcción de Refugios"},{id:"surv_alimentacion",label:"Caza, Pesca & Forrajeo"},{id:"surv_primeros_auxilios_surv",label:"Primeros Auxilios Campo"},{id:"surv_navegacion",label:"Navegación & Orientación"},{id:"surv_señales",label:"Señales & Rescate"},{id:"surv_preparacion",label:"Preparacionismo & SHTF"},{id:"surv_clima_extremo",label:"Climas Extremos"},{id:"surv_autodefensa",label:"Autodefensa & Seguridad"}]},
 ];
 
+
+// Everyday words people actually type, mapped to the category that solves them.
+// Without this, searching "grifo" or "nevera" finds nothing at all.
+const SYNONYMS={
+  plomeria:["grifo","cañeria","tuberia","fuga","agua","desague","cisterna","wc","inodoro","atasco","sifon","fontaneria","gotea"],
+  electricidad_hogar:["enchufe","luz","bombilla","interruptor","diferencial","cuadro","cable","corriente","apagon","led"],
+  pintura:["pared","pintar","brocha","rodillo","humedad","moho","gotele","yeso","grieta"],
+  carpinteria:["madera","mueble","puerta","bisagra","armario","cajon","estante","tornillo","barniz"],
+  jardineria:["planta","cesped","poda","riego","huerto","arbol","maceta","abono","semilla"],
+  limpieza:["mancha","suciedad","fregar","detergente","cal","oxido","alfombra","cristal"],
+  climatizacion:["aire","calefaccion","radiador","caldera","termostato","frio","calor","split","bomba"],
+  seguridad_hogar:["alarma","cerradura","llave","camara","candado","robo","cerrojo"],
+  oficios:["albañil","soldador","electricista","fontanero","pintor","carpintero","gremio","obra","reforma","presupuesto"],
+  electrodomesticos:["nevera","frigorifico","lavadora","lavavajillas","horno","microondas","secadora","vitroceramica","campana"],
+  computadoras:["ordenador","pc","portatil","lento","disco","ram","placa","arranca","pantalla azul"],
+  redes:["wifi","router","internet","conexion","señal","ethernet","ip","modem","repetidor"],
+  celulares:["movil","telefono","bateria","pantalla","android","iphone","tablet","cargador"],
+  audio_video:["altavoz","television","tv","sonido","hdmi","proyector","auriculares","mando"],
+  impresoras:["imprimir","tinta","toner","atasco papel","escaner","cartucho"],
+  motor:["coche","arranca","aceite","correa","embrague","bujia","distribucion","humo","averia"],
+  frenos:["freno","pastilla","disco","amortiguador","suspension","ruido"],
+  electrica_auto:["bateria coche","alternador","fusible","luces","arranque"],
+  neumaticos:["rueda","pinchazo","llanta","presion","neumatico"],
+  soldadura:["soldar","electrodo","hilo","tig","mig","acero","inox"],
+  primeros_auxilios:["herida","quemadura","corte","golpe","fiebre","ahogo","botiquin","urgencia"],
+  medicamentos:["pastilla","dosis","farmaco","jarabe","antibiotico","ibuprofeno"],
+  windows:["windows","microsoft","actualizar","registro","escritorio"],
+  linux:["linux","ubuntu","terminal","bash","sudo","kernel"],
+  programacion:["codigo","python","javascript","bug","funcion","programar","git"],
+  finanzas_personales:["ahorro","presupuesto","deuda","hipoteca","nomina","gasto"],
+  derecho_laboral:["despido","contrato trabajo","nomina","baja","finiquito","convenio","paro"],
+  derecho_civil:["herencia","alquiler","divorcio","testamento","comunidad","vecino"],
+};
+const norm0=(v)=>String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+
 const ALL_CATS=SECTIONS.flatMap(s=>s.categories.map(c=>({...c,sectionColor:s.color,sectionLabel:s.label})));
 
 // ── COLUMN FRAME WITH FLOATING CLOUDS ──
@@ -1832,6 +1867,71 @@ function OrbitalHome({onSelect}){
   );
 }
 
+
+// A blank spinner for fifteen seconds feels broken. Naming what is happening,
+// and letting each stage tick over, makes the wait legible.
+function LoadingStages({color,category}){
+  const STEPS=[
+    "Leyendo tu descripción",
+    "Consultando conocimiento técnico",
+    "Ordenando los pasos",
+    "Añadiendo herramientas y avisos",
+    "Revisando la guía",
+  ];
+  const [i,setI]=React.useState(0);
+  const [dots,setDots]=React.useState("");
+  React.useEffect(()=>{
+    // Stages advance on a slight curve: the middle ones take longer, which is
+    // closer to how the request actually behaves.
+    const delays=[900,2200,3200,2600,4000];
+    let idx=0;
+    const next=()=>{
+      idx++;
+      if(idx<STEPS.length){ setI(idx); tid=setTimeout(next,delays[idx]); }
+    };
+    let tid=setTimeout(next,delays[0]);
+    const dt=setInterval(()=>setDots(d=>d.length>=3?"":d+"."),450);
+    return()=>{clearTimeout(tid);clearInterval(dt);};
+  },[]);
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",
+                 justifyContent:"center",minHeight:"55vh",gap:22,padding:"0 20px"}}>
+      <div style={{position:"relative",width:64,height:64}}>
+        <div style={{position:"absolute",inset:0,border:"2px solid rgba(255,255,255,0.06)",
+                     borderTop:`2px solid ${color}`,borderRadius:"50%",
+                     animation:"spin 1.1s cubic-bezier(.5,.1,.5,.9) infinite"}}/>
+        <div style={{position:"absolute",inset:9,border:"2px solid rgba(255,255,255,0.04)",
+                     borderBottom:`2px solid ${color}88`,borderRadius:"50%",
+                     animation:"spin 1.7s cubic-bezier(.5,.1,.5,.9) infinite reverse"}}/>
+        <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",
+                     justifyContent:"center",fontSize:19,color,
+                     animation:"pulseSoft 2s var(--ease-soft) infinite"}}>⬡</div>
+      </div>
+
+      <div style={{textAlign:"center"}}>
+        <p style={{fontSize:15,color:"#dfe6ee",margin:0,fontFamily:"monospace"}}>
+          {STEPS[i]}<span style={{color}}>{dots}</span>
+        </p>
+        {category&&(
+          <p style={{fontSize:11,color:"#556",margin:"6px 0 0",fontFamily:"monospace"}}>
+            // {category}
+          </p>
+        )}
+      </div>
+
+      <div style={{display:"flex",gap:6}}>
+        {STEPS.map((_,k)=>(
+          <div key={k} style={{width:k===i?20:7,height:3,borderRadius:2,
+            background:k<i?color:k===i?color:"rgba(255,255,255,0.1)",
+            opacity:k<i?0.45:1,
+            transition:"width .45s var(--ease-out), background .45s var(--ease-soft), opacity .45s linear"}}/>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CatCard({cat,color,onClick}){
   const [hov,setHov]=useState(false);
   const ico=ICONS[cat.id]||ICONS.otro;
@@ -1910,6 +2010,56 @@ export default function Maestro(){
     });
     return Object.values(tally).sort((a,b)=>b.n-a.n).slice(0,6);
   },[history]);
+
+
+  // --- backup ---------------------------------------------------------------
+  // Everything lives in this browser's storage, so it vanishes if the site data
+  // is cleared or the device changes. These let the user keep a copy.
+  const exportHistory=()=>{
+    const payload={
+      app:"MAESTRO", version:1,
+      exported:new Date().toISOString(),
+      history, favourites, progress,
+    };
+    const blob=new Blob([JSON.stringify(payload,null,1)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`maestro-guias-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+
+  const importHistory=(file)=>{
+    const r=new FileReader();
+    r.onload=()=>{
+      try{
+        const d=JSON.parse(r.result);
+        if(!Array.isArray(d.history)) throw new Error("formato");
+        // Merge rather than replace, skipping guides already present.
+        setHistory(prev=>{
+          const seen=new Set(prev.map(x=>x.id));
+          const added=d.history.filter(x=>!seen.has(x.id));
+          return [...prev,...added].sort((a,b)=>b.id-a.id).slice(0,200);
+        });
+        if(Array.isArray(d.favourites)) setFavourites(f=>[...new Set([...f,...d.favourites])]);
+        if(d.progress&&typeof d.progress==="object") setProgress(p=>({...d.progress,...p}));
+        alert(`Importadas ${d.history.length} guías.`);
+      }catch(e){
+        alert("El archivo no tiene el formato esperado.");
+      }
+    };
+    r.readAsText(file);
+  };
+
+  // --- connection -----------------------------------------------------------
+  const [online,setOnline]=useState(typeof navigator==="undefined"?true:navigator.onLine);
+  React.useEffect(()=>{
+    const up=()=>setOnline(true), down=()=>setOnline(false);
+    window.addEventListener("online",up);
+    window.addEventListener("offline",down);
+    return()=>{window.removeEventListener("online",up);window.removeEventListener("offline",down);};
+  },[]);
 
   const deleteHistoryItem=(id)=>{
     setHistory(h=>h.filter(x=>x.id!==id));
@@ -1992,7 +2142,25 @@ export default function Maestro(){
   },[autoSpoken,speak]);
   const {playing,start,stop}=useMatrixAudio();
 
-  const filtered=search.trim()?ALL_CATS.filter(c=>c.label.toLowerCase().includes(search.toLowerCase())||c.sectionLabel.toLowerCase().includes(search.toLowerCase())):null;
+  // Matches the visible name, the section, and the everyday words above, so
+  // "grifo" reaches Plomería and "nevera" reaches Electrodomésticos.
+  const filtered=React.useMemo(()=>{
+    const q=norm0(search.trim());
+    if(!q) return null;
+    const scored=ALL_CATS.map(c=>{
+      const name=norm0(c.label), sect=norm0(c.sectionLabel);
+      const syn=(SYNONYMS[c.id]||[]).map(norm0);
+      let score=0;
+      if(name.startsWith(q)) score=100;
+      else if(name.includes(q)) score=80;
+      else if(syn.some(w=>w===q)) score=70;
+      else if(syn.some(w=>w.startsWith(q))) score=60;
+      else if(syn.some(w=>w.includes(q)||q.includes(w))) score=45;
+      else if(sect.includes(q)) score=25;
+      return {c,score};
+    }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
+    return scored.map(x=>x.c);
+  },[search]);
 
   const handleCategory=(cat,origin)=>{
     setSelectedCategory(cat); setSearch(""); setViewHistory(false);
@@ -2059,6 +2227,26 @@ export default function Maestro(){
     return next;
   });
   const reset=()=>{setScreen("home");setSelectedCategory(null);setProblem("");setGuide(null);setCompletedSteps([]);setViewHistory(false);setSearch("");setEnteredByStar(false);setJourney(null);setHistQuery("");setHistFilter("todas");};
+
+  // --- hardware back button -------------------------------------------------
+  // Without this the device back button leaves the app entirely, even when the
+  // user is three screens deep. Each screen pushes a history entry so back
+  // steps through them instead.
+  React.useEffect(()=>{
+    const depth = viewHistory ? 1 : screen==="home" ? 0 : screen==="describe" ? 1 : 2;
+    if(depth>0 && !window.history.state?.maestro){
+      window.history.pushState({maestro:true,depth},"");
+    }
+    const onPop=()=>{
+      if(viewHistory){ setViewHistory(false); return; }
+      if(screen==="guide"){ setScreen("describe"); return; }
+      if(screen==="describe"){ reset(); return; }
+      // already home: let the browser handle it
+    };
+    window.addEventListener("popstate",onPop);
+    return()=>window.removeEventListener("popstate",onPop);
+  },[screen,viewHistory]);
+
   const openHistoryItem=item=>{
     setSelectedCategory(item.category);
     setGuide(item.guide);
@@ -2122,6 +2310,28 @@ export default function Maestro(){
             </button>
 
             <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid rgba(0,180,255,0.12)"}}>
+              <p style={{fontFamily:"monospace",fontSize:12,color:"#00cfff",marginBottom:8}}>💾 Copia de seguridad</p>
+              <div style={{display:"flex",gap:7,marginBottom:6}}>
+                <button onClick={exportHistory}
+                  style={{flex:1,padding:"9px",border:"1px solid rgba(0,180,255,0.25)",borderRadius:4,
+                          background:"rgba(0,180,255,0.08)",color:"#00cfff",fontFamily:"monospace",
+                          fontSize:11,cursor:"pointer"}}>
+                  ↓ Exportar ({history.length})
+                </button>
+                <label style={{flex:1,padding:"9px",border:"1px solid rgba(0,180,255,0.25)",borderRadius:4,
+                               background:"transparent",color:"#00aaee",fontFamily:"monospace",
+                               fontSize:11,cursor:"pointer",textAlign:"center"}}>
+                  ↑ Importar
+                  <input type="file" accept="application/json" style={{display:"none"}}
+                    onChange={e=>{const f=e.target.files?.[0]; if(f) importHistory(f); e.target.value="";}}/>
+                </label>
+              </div>
+              <p style={{fontSize:10,color:"#4a5a6a",marginBottom:14,fontFamily:"monospace",lineHeight:1.5}}>
+                Guarda tus guías en un archivo por si cambias de dispositivo.
+              </p>
+            </div>
+
+            <div style={{marginTop:4,paddingTop:14,borderTop:"1px solid rgba(0,180,255,0.12)"}}>
               <button onClick={()=>setShowLog(v=>!v)}
                 style={{width:"100%",padding:"9px",border:"1px solid rgba(0,180,255,0.25)",borderRadius:4,background:"transparent",color:"#00aaee",fontFamily:"monospace",fontSize:11,cursor:"pointer"}}>
                 🩺 {showLog?"Ocultar":"Ver"} registro de diagnóstico
@@ -2165,6 +2375,17 @@ export default function Maestro(){
               })()}
             </div>
           </div>
+        </div>
+      )}
+      {!online&&(
+        <div style={{position:"sticky",top:0,zIndex:40,background:"rgba(244,162,97,0.14)",
+                     borderBottom:"1px solid rgba(244,162,97,0.3)",padding:"7px 14px",
+                     display:"flex",alignItems:"center",gap:9,
+                     animation:"fadeIn .4s var(--ease-out) both"}}>
+          <span style={{fontSize:13}}>📡</span>
+          <span style={{fontFamily:"monospace",fontSize:11,color:"#f4a261"}}>
+            Sin conexión · puedes consultar tus guías guardadas
+          </span>
         </div>
       )}
       <main style={{position:"relative",zIndex:1,maxWidth:"100%",width:"100%",margin:"0 auto",padding:"16px 12px 80px",boxSizing:"border-box"}}>
@@ -2417,13 +2638,7 @@ export default function Maestro(){
 
         {screen==="guide"&&(
           <div style={{animation:"fadeIn .45s var(--ease-out) both"}}>
-            {loading&&(
-              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"55vh",gap:16}}>
-                <div style={{width:48,height:48,border:"3px solid rgba(0,255,65,0.1)",borderTop:`3px solid ${accentColor}`,borderRadius:"50%",animation:"spin 0.75s linear infinite"}}/>
-                <p style={{fontSize:18,color:"#eee",margin:0,fontFamily:"monospace"}}>Analizando tu problema...</p>
-                <p style={{fontSize:13,color:"#555",margin:0,fontFamily:"monospace"}}>// Generando guía con IA</p>
-              </div>
-            )}
+            {loading&&<LoadingStages color={accentColor} category={selectedCategory?.label}/>}
             {!loading&&guide&&!guide.error&&(
               <div>
                 <div style={{display:"flex",gap:16,alignItems:"flex-start",marginBottom:16}}>
@@ -2476,14 +2691,23 @@ export default function Maestro(){
                           <div style={{width:30,height:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold",fontFamily:"monospace",transition:"background .3s var(--ease-soft), border-color .3s var(--ease-soft), color .3s var(--ease-soft)",flexShrink:0,marginTop:2,background:done?accentColor:"rgba(0,255,65,0.1)",color:done?"#000":"rgba(0,255,65,0.5)"}}>{done?"✓":i+1}</div>
                           <div style={{flex:1}}>
                             <p style={{fontSize:15,fontWeight:"bold",margin:"0 0 6px",lineHeight:1.3,opacity:done?0.45:1,textDecoration:done?"line-through":"none",fontFamily:"monospace"}}>{paso.titulo}</p>
-                            <p style={{fontSize:14,margin:"0 0 8px",color:"#c8ffd4",lineHeight:1.6,fontFamily:"monospace",opacity:done?0.35:0.8}}>{paso.descripcion}</p>
-                            {paso.consejo&&<div style={{display:"flex",gap:8,background:"rgba(233,196,106,0.07)",border:"1px solid rgba(233,196,106,0.15)",borderRadius:4,padding:"8px 12px",alignItems:"flex-start"}}><span>💡</span><span style={{fontSize:12,color:"#e9c46a",fontFamily:"monospace",lineHeight:1.5}}>{paso.consejo}</span></div>}
+                            {!done&&(
+                              <>
+                                <p style={{fontSize:14,margin:"0 0 8px",color:"#c8ffd4",lineHeight:1.6,fontFamily:"monospace",opacity:0.8}}>{paso.descripcion}</p>
+                                {paso.consejo&&<div style={{display:"flex",gap:8,background:"rgba(233,196,106,0.07)",border:"1px solid rgba(233,196,106,0.15)",borderRadius:4,padding:"8px 12px",alignItems:"flex-start"}}><span>💡</span><span style={{fontSize:12,color:"#e9c46a",fontFamily:"monospace",lineHeight:1.5}}>{paso.consejo}</span></div>}
+                              </>
+                            )}
+                            {done&&(
+                              <p style={{fontSize:11,margin:0,color:"#4a5a68",fontFamily:"monospace"}}>
+                                toca para desplegar
+                              </p>
+                            )}
                           </div>
                         </div>
-                        <div style={{display:"flex",gap:8,padding:"10px 17px 13px 61px",borderTop:"1px solid rgba(0,255,65,0.07)"}}>
+                        {!done&&<div style={{display:"flex",gap:8,padding:"10px 17px 13px 61px",borderTop:"1px solid rgba(0,255,65,0.07)"}}>
                           <a href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:4,background:"rgba(255,0,0,0.12)",border:"1px solid rgba(255,0,0,0.25)",color:"#ff6b6b",fontSize:12,fontFamily:"monospace",textDecoration:"none",fontWeight:"600"}}>▶ YouTube</a>
                           <a href={`https://www.google.com/search?tbm=isch&q=${query}`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:4,background:"rgba(66,133,244,0.12)",border:"1px solid rgba(66,133,244,0.25)",color:"#6ba3f5",fontSize:12,fontFamily:"monospace",textDecoration:"none",fontWeight:"600"}}>🖼 Imágenes</a>
-                        </div>
+                        </div>}
                       </div>
                     );
                   })}
@@ -2559,6 +2783,7 @@ export default function Maestro(){
         }
         @keyframes fadeIn{from{opacity:0;transform:translateY(16px) scale(.985);}to{opacity:1;transform:translateY(0) scale(1);}}
         @keyframes spin{to{transform:rotate(360deg);}}
+        @keyframes pulseSoft{0%,100%{opacity:.55;transform:scale(1);}50%{opacity:1;transform:scale(1.14);}}
         @keyframes scan{0%,100%{opacity:0;transform:translateX(-100%);}50%{opacity:1;transform:translateX(100%);}}
         textarea:focus,input:focus{outline:none;border-color:rgba(0,255,65,0.5)!important;box-shadow:0 0 10px rgba(0,255,65,0.15)!important;}
         textarea{color:#00ff41!important;}input{color:#00ff41!important;}
