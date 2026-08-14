@@ -1858,6 +1858,14 @@ export default function Maestro(){
   const [guide,setGuide]=useState(null);
   const [loading,setLoading]=useState(false);
   const [completedSteps,setCompletedSteps]=useState([]);
+  const [activeGuideId,setActiveGuideId]=useState(null);
+  // Progress is stored per guide so a job left half done can be resumed.
+  const [progress,setProgress]=useState(()=>{
+    try{const v=localStorage.getItem("maestro_progress");return v?JSON.parse(v):{};}catch(e){return {};}
+  });
+  React.useEffect(()=>{
+    try{localStorage.setItem("maestro_progress",JSON.stringify(progress));}catch(e){}
+  },[progress]);
   const [search,setSearch]=useState("");
   const [history,setHistory]=useState(()=>{
     try{const s=localStorage.getItem("maestro_history")||sessionStorage.getItem("maestro_history");return s?JSON.parse(s):[];}catch(e){return [];}
@@ -1889,6 +1897,24 @@ export default function Maestro(){
     try{localStorage.setItem("maestro_favs",JSON.stringify(favourites));}catch(e){}
   },[favourites]);
   const toggleFav=(id)=>setFavourites(f=>f.includes(id)?f.filter(x=>x!==id):[...f,id]);
+
+  // The six categories used most often, so common jobs skip the orbital
+  // navigation entirely.
+  const frequentCategories=React.useMemo(()=>{
+    const tally={};
+    history.forEach(h=>{
+      const c=h.category; if(!c?.id) return;
+      if(!tally[c.id]) tally[c.id]={cat:c,n:0};
+      tally[c.id].n++;
+    });
+    return Object.values(tally).sort((a,b)=>b.n-a.n).slice(0,6);
+  },[history]);
+
+  const deleteHistoryItem=(id)=>{
+    setHistory(h=>h.filter(x=>x.id!==id));
+    setFavourites(f=>f.filter(x=>x!==id));
+    setProgress(p=>{const n={...p};delete n[id];return n;});
+  };
 
   // Searches title, category, section and the words of every step, so a guide
   // can be found by what it was about and not only by its heading.
@@ -1932,7 +1958,6 @@ export default function Maestro(){
   const [darkMode,setDarkMode]=useState(false);
   const [lang,setLang]=useState("es");
   const [level,setLevel]=useState("normal"); // "simple" | "normal" | "experto"
-  const [points,setPoints]=useState(0);
   const { listening, speaking, startListening, stopListening, speak, stopSpeaking } = useSpeech();
 
   // Speak the welcome question once on first interaction
@@ -2017,6 +2042,7 @@ export default function Maestro(){
       if(!parsed){setGuide({error:true,msg:"Error al parsear respuesta.",raw:raw.slice(0,300)});return;}
       setGuide(parsed);
       const newEntry={id:Date.now(),category:selectedCategory,problem,guide:parsed,date:new Date().toLocaleDateString("es-ES"),ai:aiProvider};
+      setActiveGuideId(newEntry.id);
       setHistory(prev=>{
         const updated=[newEntry,...prev.slice(0,19)];
         try{localStorage.setItem("maestro_history",JSON.stringify(updated));sessionStorage.setItem("maestro_history",JSON.stringify(updated));}catch(e){}
@@ -2026,9 +2052,20 @@ export default function Maestro(){
     finally{setLoading(false);}
   };
 
-  const toggleStep=i=>setCompletedSteps(prev=>prev.includes(i)?prev.filter(s=>s!==i):[...prev,i]);
+  const toggleStep=i=>setCompletedSteps(prev=>{
+    const next=prev.includes(i)?prev.filter(s=>s!==i):[...prev,i];
+    if(activeGuideId) setProgress(p=>({...p,[activeGuideId]:next}));
+    return next;
+  });
   const reset=()=>{setScreen("home");setSelectedCategory(null);setProblem("");setGuide(null);setCompletedSteps([]);setViewHistory(false);setSearch("");setEnteredByStar(false);setJourney(null);setHistQuery("");setHistFilter("todas");};
-  const openHistoryItem=item=>{setSelectedCategory(item.category);setGuide(item.guide);setCompletedSteps([]);setViewHistory(false);setScreen("guide");};
+  const openHistoryItem=item=>{
+    setSelectedCategory(item.category);
+    setGuide(item.guide);
+    setActiveGuideId(item.id);
+    setCompletedSteps(progress[item.id]||[]);   // resume where it was left
+    setViewHistory(false);
+    setScreen("guide");
+  };
 
   const diffColor={Facil:"#57cc99",Moderado:"#f4a261",Dificil:"#ff6b6b",Experto:"#f72585"};
   const accentColor=selectedCategory?.sectionColor||"#c77dff";
@@ -2048,7 +2085,6 @@ export default function Maestro(){
             <button onClick={()=>setAiProvider("claude")} style={{padding:"5px 10px",background:aiProvider==="claude"?"rgba(199,125,255,0.25)":"transparent",color:aiProvider==="claude"?"#c77dff":"#555",border:"none",cursor:"pointer",fontSize:11,fontFamily:"monospace",fontWeight:"bold"}}>⚡ Claude</button>
             <button onClick={()=>setAiProvider("gemini")} style={{padding:"5px 10px",background:aiProvider==="gemini"?"rgba(66,133,244,0.25)":"transparent",color:aiProvider==="gemini"?"#6ba3f5":"#555",border:"none",cursor:"pointer",fontSize:11,fontFamily:"monospace",fontWeight:"bold"}}>✦ Gemini</button>
           </div>
-          <span style={{fontFamily:"monospace",fontSize:11,color:"#00cfff",background:"rgba(0,180,255,0.1)",border:"1px solid rgba(0,180,255,0.2)",padding:"4px 8px",borderRadius:4}}>⭐{points}</span>
           <button onClick={()=>setDarkMode(v=>!v)} style={{...btnStyle}} title="Tema">{darkMode?"🌙":"☀️"}</button>
           <button onClick={()=>setShowKeys(v=>!v)} style={{...btnStyle,fontSize:14}}>⚙️</button>
           <button onClick={()=>playing?stop():start()} style={{...btnStyle,background:playing?"rgba(0,180,255,0.12)":"rgba(0,8,20,0.8)",border:"1px solid "+(playing?"rgba(0,180,255,0.5)":"rgba(0,180,255,0.2)"),color:playing?"#00cfff":"#00aaee",boxShadow:playing?"0 0 10px rgba(0,180,255,0.3)":"none"}}>
@@ -2166,7 +2202,35 @@ export default function Maestro(){
                 </div>
               </div>
             ):(
-              <OrbitalHome onSelect={handleCategory}/>
+              <>
+                {frequentCategories.length>0&&(
+                  <div style={{marginBottom:6}}>
+                    <p style={{fontFamily:"monospace",fontSize:10,color:"#445",
+                               letterSpacing:"0.14em",marginBottom:7}}>// ACCESO RÁPIDO</p>
+                    <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:4}}>
+                      {frequentCategories.map(({cat,n})=>(
+                        <button key={cat.id} onClick={()=>handleCategory(cat)}
+                          style={{display:"flex",alignItems:"center",gap:7,flexShrink:0,
+                                  padding:"7px 12px",borderRadius:20,
+                                  border:`1px solid ${cat.sectionColor}44`,
+                                  background:`${cat.sectionColor}12`,cursor:"pointer",
+                                  transition:"all .25s var(--ease-soft)"}}>
+                          <span style={{width:17,height:17,flexShrink:0}}>
+                            {ICONS[cat.id]&&<CyberIcon d={ICONS[cat.id].d} d2={ICONS[cat.id].d2}
+                              color={cat.sectionColor} size={17} gradId={`fq_${cat.id}`}/>}
+                          </span>
+                          <span style={{fontFamily:"monospace",fontSize:11,
+                                        color:cat.sectionColor,whiteSpace:"nowrap"}}>
+                            {cat.label}
+                          </span>
+                          <span style={{fontFamily:"monospace",fontSize:9,color:"#556"}}>{n}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <OrbitalHome onSelect={handleCategory}/>
+              </>
             )}
           </div>
         )}
@@ -2176,9 +2240,21 @@ export default function Maestro(){
             <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24,flexWrap:"wrap"}}>
               <h2 style={{fontSize:22,fontFamily:"monospace",margin:0}}>📋 Historial</h2>
               <div style={{display:"flex",gap:8,marginLeft:"auto",flexWrap:"wrap"}}>
-                <span style={{fontFamily:"monospace",fontSize:12,color:"#f9c74f",background:"rgba(249,199,79,0.1)",border:"1px solid rgba(249,199,79,0.2)",padding:"4px 10px",borderRadius:20}}>⭐ {points} pts</span>
-                {points>=50&&<span style={{fontFamily:"monospace",fontSize:12,color:"#c77dff",background:"rgba(199,125,255,0.1)",border:"1px solid rgba(199,125,255,0.2)",padding:"4px 10px",borderRadius:20}}>🏆 Experto</span>}
-                {history.length>=5&&<span style={{fontFamily:"monospace",fontSize:12,color:"#52b788",background:"rgba(82,183,136,0.1)",border:"1px solid rgba(82,183,136,0.2)",padding:"4px 10px",borderRadius:20}}>🔥 {history.length} guías</span>}
+                {/* Points and badges were removed: they counted up but led nowhere,
+                    and the space is better spent on information that is useful. */}
+                {(()=>{
+                  const enCurso=history.filter(h=>{
+                    const d=progress[h.id]||[];
+                    return d.length>0 && d.length<(h.guide?.pasos?.length||99);
+                  }).length;
+                  return enCurso>0?(
+                    <span style={{fontFamily:"monospace",fontSize:11,color:"#f4a261",
+                                  background:"rgba(244,162,97,0.1)",border:"1px solid rgba(244,162,97,0.25)",
+                                  padding:"4px 10px",borderRadius:20}}>
+                      ⏳ {enCurso} sin terminar
+                    </span>
+                  ):null;
+                })()}
               </div>
             </div>
             {history.length===0?<p style={{color:"#555",fontFamily:"monospace"}}>Sin historial aún.</p>:(
@@ -2262,6 +2338,28 @@ export default function Maestro(){
                                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                               <Highlight text={item.category.label}/> · {item.date}
                             </p>
+                            {/* how far this guide was taken, so unfinished jobs stand out */}
+                            {(()=>{
+                              const done=(progress[item.id]||[]).length;
+                              const total=item.guide?.pasos?.length||0;
+                              if(!total||!done) return null;
+                              const pct=Math.round(done/total*100);
+                              const finished=done>=total;
+                              return(
+                                <div style={{display:"flex",alignItems:"center",gap:7,marginTop:5}}>
+                                  <div style={{flex:1,height:3,borderRadius:2,
+                                               background:"rgba(255,255,255,0.07)",overflow:"hidden"}}>
+                                    <div style={{height:"100%",width:`${pct}%`,borderRadius:2,
+                                                 background:finished?"#57cc99":"#f4a261",
+                                                 transition:"width .55s var(--ease-out)"}}/>
+                                  </div>
+                                  <span style={{fontFamily:"monospace",fontSize:9,
+                                                color:finished?"#57cc99":"#f4a261",flexShrink:0}}>
+                                    {finished?"✓ completada":`${done}/${total}`}
+                                  </span>
+                                </div>
+                              );
+                            })()}
                           </button>
                           <button onClick={()=>toggleFav(item.id)}
                             title={fav?"Quitar de favoritas":"Marcar como favorita"}
@@ -2270,6 +2368,13 @@ export default function Maestro(){
                                     padding:"0 4px",transition:"color .25s var(--ease-soft)"}}>
                             {fav?"★":"☆"}
                           </button>
+                          <button onClick={()=>{
+                              if(confirm("¿Borrar esta guía del historial?")) deleteHistoryItem(item.id);
+                            }}
+                            title="Borrar del historial"
+                            style={{background:"none",border:"none",cursor:"pointer",
+                                    fontSize:14,color:"#3a4450",padding:"0 4px",
+                                    transition:"color .25s var(--ease-soft)"}}>🗑</button>
                           <span style={{color:"#445",fontSize:16}}>→</span>
                         </div>
                       );
@@ -2398,7 +2503,7 @@ export default function Maestro(){
                         💬 WHATSAPP
                       </button>
                     </div>
-                    <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,marginTop:20,fontFamily:"monospace"}} onClick={()=>{setPoints(p=>p+10);reset();}}>RESOLVER OTRO</button>
+                    <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,marginTop:20,fontFamily:"monospace"}} onClick={()=>reset()}>RESOLVER OTRO</button>
                   </div>
                 )}
               </div>
@@ -2409,7 +2514,22 @@ export default function Maestro(){
                 <p style={{fontSize:16,marginTop:12}}>No se pudo generar la guía.</p>
                 {guide.msg&&<p style={{fontSize:13,color:"#a05050",maxWidth:400,margin:"0 auto 8px"}}>{guide.msg}</p>}
                 {guide.raw&&<pre style={{fontSize:11,color:"#555",maxWidth:400,margin:"0 auto 16px",textAlign:"left",whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{guide.raw}</pre>}
-                <button style={{padding:"12px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:"#f4a261",fontFamily:"monospace"}} onClick={()=>setScreen("describe")}>INTENTAR DE NUEVO</button>
+                <div style={{display:"flex",gap:9,justifyContent:"center",flexWrap:"wrap"}}>
+                  {/* Retries with the text already written - the old flow sent the
+                      user back to an empty form. */}
+                  <button style={{padding:"12px 22px",border:"none",borderRadius:4,color:"#000",fontSize:14,fontWeight:"bold",cursor:"pointer",background:"#f4a261",fontFamily:"monospace"}}
+                    onClick={()=>fetchGuide()}>↻ REINTENTAR</button>
+                  {aiProvider==="claude"&&apiKeys.gemini&&(
+                    <button style={{padding:"12px 22px",border:"1px solid rgba(66,133,244,0.4)",borderRadius:4,color:"#6ba3f5",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}}
+                      onClick={()=>{setAiProvider("gemini");setTimeout(()=>fetchGuide(),60);}}>✦ PROBAR GEMINI</button>
+                  )}
+                  {aiProvider==="gemini"&&(
+                    <button style={{padding:"12px 22px",border:"1px solid rgba(199,125,255,0.4)",borderRadius:4,color:"#c77dff",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}}
+                      onClick={()=>{setAiProvider("claude");setTimeout(()=>fetchGuide(),60);}}>⚡ PROBAR CLAUDE</button>
+                  )}
+                  <button style={{padding:"12px 22px",border:"1px solid rgba(255,255,255,0.14)",borderRadius:4,color:"#889",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}}
+                    onClick={()=>setScreen("describe")}>✎ EDITAR</button>
+                </div>
               </div>
             )}
           </div>
