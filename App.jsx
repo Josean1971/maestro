@@ -1971,6 +1971,14 @@ export default function Maestro(){
   const [history,setHistory]=useState(()=>{
     try{const s=localStorage.getItem("maestro_history")||sessionStorage.getItem("maestro_history");return s?JSON.parse(s):[];}catch(e){return [];}
   });
+  // Persist on every change - additions, deletions and imports alike.
+  React.useEffect(()=>{
+    try{
+      const data=JSON.stringify(history);
+      localStorage.setItem("maestro_history",data);
+      sessionStorage.setItem("maestro_history",data);
+    }catch(e){}
+  },[history]);
   const [viewHistory,setViewHistory]=useState(false);
   const [aiProvider,setAiProvider]=useState("claude");
   // API keys persist in this browser so they only need to be entered once.
@@ -2212,11 +2220,7 @@ export default function Maestro(){
       setGuide(parsed);
       const newEntry={id:Date.now(),category:selectedCategory,problem,guide:parsed,date:new Date().toLocaleDateString("es-ES"),ai:aiProvider};
       setActiveGuideId(newEntry.id);
-      setHistory(prev=>{
-        const updated=[newEntry,...prev.slice(0,19)];
-        try{localStorage.setItem("maestro_history",JSON.stringify(updated));sessionStorage.setItem("maestro_history",JSON.stringify(updated));}catch(e){}
-        return updated;
-      });
+      setHistory(prev=>[newEntry,...prev.slice(0,49)]);
     }catch(e){setGuide({error:true,msg:e.message||"Error de red."});}
     finally{setLoading(false);}
   };
