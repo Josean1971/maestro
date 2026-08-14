@@ -1870,7 +1870,7 @@ function OrbitalHome({onSelect}){
 
 // A blank spinner for fifteen seconds feels broken. Naming what is happening,
 // and letting each stage tick over, makes the wait legible.
-function LoadingStages({color,category}){
+function LoadingStages({color,category,note}){
   const STEPS=[
     "Leyendo tu descripción",
     "Consultando conocimiento técnico",
@@ -1918,6 +1918,12 @@ function LoadingStages({color,category}){
             // {category}
           </p>
         )}
+        {note&&(
+          <p style={{fontSize:11,color:"#f4a261",margin:"9px 0 0",fontFamily:"monospace",
+                     animation:"fadeIn .3s var(--ease-out) both"}}>
+            ⏳ {note}
+          </p>
+        )}
       </div>
 
       <div style={{display:"flex",gap:6}}>
@@ -1960,6 +1966,7 @@ export default function Maestro(){
   const [loading,setLoading]=useState(false);
   const [completedSteps,setCompletedSteps]=useState([]);
   const [activeGuideId,setActiveGuideId]=useState(null);
+  const [loadingNote,setLoadingNote]=useState("");
   // Progress is stored per guide so a job left half done can be resumed.
   const [progress,setProgress]=useState(()=>{
     try{const v=localStorage.getItem("maestro_progress");return v?JSON.parse(v):{};}catch(e){return {};}
@@ -2195,23 +2202,95 @@ export default function Maestro(){
       if(aiProvider==="claude"){
         const h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};
         if(apiKeys.claude) h["x-api-key"]=apiKeys.claude;
-        const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:h,body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:4000,system:sys,messages:[{role:"user",content:usr}]})});
-        if(!res.ok){const e=await res.json().catch(()=>({}));setGuide({error:true,msg:"Claude Error "+res.status+": "+JSON.stringify(e).slice(0,200)});return;}
+        // Same treatment as Gemini: overload and rate limits clear on their own.
+        const TRANSIENT=[429,500,502,503,504,529];
+        const wait=(ms)=>new Promise(r=>setTimeout(r,ms));
+        let res=null,lastErr="",lastStatus=0;
+        for(let attempt=0;attempt<3;attempt++){
+          if(attempt>0){
+            setLoadingNote(`Servidor ocupado · reintentando (${attempt}/2)`);
+            await wait(1200*Math.pow(2,attempt-1));
+          }
+          try{
+            res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:h,
+              body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:4000,system:sys,messages:[{role:"user",content:usr}]})});
+          }catch(netErr){
+            lastErr="Sin respuesta del servidor. Comprueba tu conexión.";
+            lastStatus=0; continue;
+          }
+          if(res.ok) break;
+          const e=await res.json().catch(()=>({}));
+          lastStatus=res.status;
+          lastErr=(e&&e.error&&e.error.message)?e.error.message:("Error "+res.status);
+          if(!TRANSIENT.includes(res.status)) break;
+        }
+        setLoadingNote("");
+        if(!res||!res.ok){
+          const friendly =
+            TRANSIENT.includes(lastStatus)
+              ? "Los servidores de Claude están saturados. Prueba de nuevo en un minuto, o cambia a Gemini."
+            : lastStatus===401
+              ? "La clave de Claude no es válida. Revísala en ⚙️."
+            : lastStatus===400
+              ? "Falta la clave de Claude o la petición no es válida. Añádela en ⚙️."
+            : lastErr||"Claude no respondió.";
+          setGuide({error:true,msg:friendly,retryable:TRANSIENT.includes(lastStatus)||lastStatus===0});
+          return;
+        }
         const data=await res.json();
         raw=data.content.map(b=>b.text||"").join("").trim();
       } else {
         if(!apiKeys.gemini){setGuide({error:true,msg:"⚠️ Añade tu API Key de Gemini pulsando ⚙️. Es gratis en aistudio.google.com"});return;}
         // Model names change over time; try current ones in order until one works.
         const GEMINI_MODELS=["gemini-2.5-flash","gemini-2.0-flash","gemini-flash-latest","gemini-2.5-pro"];
-        let res=null,lastErr="";
+        let res=null,lastErr="",lastStatus=0;
+
+        // Google returns 503 when a model is saturated and 429 when the free
+        // quota is hit. Both clear on their own, so the request is retried with
+        // a growing pause and, failing that, handed to another model. Only a
+        // bad key or a malformed request is worth giving up on immediately.
+        const TRANSIENT=[429,500,502,503,504];
+        const wait=(ms)=>new Promise(r=>setTimeout(r,ms));
+
+        outer:
         for(const m of GEMINI_MODELS){
-          res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+apiKeys.gemini,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{parts:[{text:usr}]}],generationConfig:{maxOutputTokens:4000}})});
-          if(res.ok) break;
-          const e=await res.json().catch(()=>({}));
-          lastErr="Gemini Error "+res.status+": "+JSON.stringify(e).slice(0,200);
-          if(res.status!==404) break;   // only a missing model is worth retrying
+          for(let attempt=0;attempt<3;attempt++){
+            if(attempt>0){
+              setLoadingNote(`Servidor ocupado · reintentando (${attempt}/2)`);
+              await wait(1200*Math.pow(2,attempt-1));   // 1.2s, then 2.4s
+            }
+            try{
+              res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+apiKeys.gemini,
+                {method:"POST",headers:{"Content-Type":"application/json"},
+                 body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{parts:[{text:usr}]}],generationConfig:{maxOutputTokens:4000}})});
+            }catch(netErr){
+              lastErr="Sin respuesta del servidor. Comprueba tu conexión.";
+              lastStatus=0; continue;
+            }
+            if(res.ok) break outer;
+            const e=await res.json().catch(()=>({}));
+            lastStatus=res.status;
+            lastErr=(e&&e.error&&e.error.message)?e.error.message:("Error "+res.status);
+            if(!TRANSIENT.includes(res.status)) break;   // real problem: stop retrying
+          }
+          if(res&&res.ok) break;
+          if(lastStatus&&!TRANSIENT.includes(lastStatus)&&lastStatus!==404) break;
+          setLoadingNote("Probando otro modelo…");
         }
-        if(!res||!res.ok){setGuide({error:true,msg:lastErr||"Gemini no respondió."});return;}
+        setLoadingNote("");
+
+        if(!res||!res.ok){
+          const friendly =
+            lastStatus===503||lastStatus===429
+              ? "Los servidores de Google están saturados ahora mismo. Suele durar poco: prueba de nuevo en un minuto, o cambia a Claude."
+            : lastStatus===400
+              ? "La clave de Gemini no parece válida. Revísala en ⚙️."
+            : lastStatus===403
+              ? "La clave de Gemini no tiene permiso. Genera una nueva en aistudio.google.com."
+            : lastErr||"Gemini no respondió.";
+          setGuide({error:true,msg:friendly,retryable:lastStatus===503||lastStatus===429||lastStatus===0});
+          return;
+        }
         const data=await res.json();
         raw=(data&&data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text)||"";
       }
@@ -2222,7 +2301,7 @@ export default function Maestro(){
       setActiveGuideId(newEntry.id);
       setHistory(prev=>[newEntry,...prev.slice(0,49)]);
     }catch(e){setGuide({error:true,msg:e.message||"Error de red."});}
-    finally{setLoading(false);}
+    finally{setLoading(false);setLoadingNote("");}
   };
 
   const toggleStep=i=>setCompletedSteps(prev=>{
@@ -2642,7 +2721,7 @@ export default function Maestro(){
 
         {screen==="guide"&&(
           <div style={{animation:"fadeIn .45s var(--ease-out) both"}}>
-            {loading&&<LoadingStages color={accentColor} category={selectedCategory?.label}/>}
+            {loading&&<LoadingStages color={accentColor} category={selectedCategory?.label} note={loadingNote}/>}
             {!loading&&guide&&!guide.error&&(
               <div>
                 <div style={{display:"flex",gap:16,alignItems:"flex-start",marginBottom:16}}>
