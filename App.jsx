@@ -316,24 +316,58 @@ function useSpeech() {
   // engine never runs out mid-thought, but the pieces must be queued together
   // or a silent gap appears between them.
 
-  // Pick the most natural Spanish voice available, preferring the neural /
-  // enhanced ones the platform ships over the older robotic defaults.
-  const pickVoice = React.useCallback(() => {
-    const voices = window.speechSynthesis.getVoices().filter(v => /^es/i.test(v.lang));
+  // Voices load asynchronously on most platforms, so the list has to be
+  // rebuilt when the browser signals it is ready.
+  const [voices,setVoices]=React.useState([]);
+  React.useEffect(()=>{
+    if(!window.speechSynthesis) return;
+    const load=()=>{
+      const all=window.speechSynthesis.getVoices();
+      if(all.length) setVoices(all);
+    };
+    load();
+    window.speechSynthesis.onvoiceschanged=load;
+    // Some Android builds populate the list late and never fire the event.
+    const t=setTimeout(load,900);
+    return()=>clearTimeout(t);
+  },[]);
+
+  // The user's chosen voice and pace, remembered on this device.
+  const [voicePref,setVoicePref]=React.useState(()=>{
+    try{return JSON.parse(localStorage.getItem("maestro_voice")||"null")||{name:"",rate:1};}
+    catch(e){return {name:"",rate:1};}
+  });
+  React.useEffect(()=>{
+    try{localStorage.setItem("maestro_voice",JSON.stringify(voicePref));}catch(e){}
+  },[voicePref]);
+
+  // Falls back to the best automatic choice when nothing is selected,
+  // preferring the neural voices a platform ships over its older defaults.
+  const pickVoice = React.useCallback((langTag) => {
+    const want=(langTag||"es-ES");
+    const base=want.split("-")[0].toLowerCase();
+    const all=window.speechSynthesis.getVoices();
+    // Exact region first, then any voice for the same language.
+    let voices=all.filter(v=>v.lang.toLowerCase().replace("_","-")===want.toLowerCase());
+    if(!voices.length) voices=all.filter(v=>v.lang.toLowerCase().split(/[-_]/)[0]===base);
     if (!voices.length) return null;
+    if (voicePref.name) {
+      const chosen = voices.find(v => v.name === voicePref.name);
+      if (chosen) return chosen;
+    }
     const score = (v) => {
       const n = (v.name || "").toLowerCase();
       let s = 0;
       if (/natural|neural|enhanced|premium|wavenet|siri/.test(n)) s += 40;
       if (/google/.test(n)) s += 25;
       if (/microsoft|helena|laura|pablo|alvaro|elvira/.test(n)) s += 15;
-      if (/^es-es/i.test(v.lang)) s += 10;      // peninsular Spanish first
+      if (v.lang.toLowerCase().replace("_","-")===want.toLowerCase()) s += 10;
       if (v.localService) s += 5;               // local voices don't stutter
       if (/compact|eloquence|espeak/.test(n)) s -= 30;
       return s;
     };
     return voices.sort((a, b) => score(b) - score(a))[0];
-  }, []);
+  }, [voicePref]);
 
   // Break text into speakable pieces: sentences first, then group them so each
   // piece is long enough to sound continuous but short enough to stay stable.
@@ -362,14 +396,15 @@ function useSpeech() {
     return out.filter(Boolean);
   }, []);
 
-  const speak = React.useCallback((text) => {
+  const speak = React.useCallback((text,langTag) => {
     const synth = window.speechSynthesis;
     if (!synth) return;
     synth.cancel();
 
     const parts = splitForSpeech(text);
     if (!parts.length) return;
-    const voice = pickVoice();
+    const lang = langTag || "es-ES";
+    const voice = pickVoice(lang);
 
     setSpeaking(true);
     // Heavy canvas work starves the speech engine on low-end devices, so the
@@ -378,8 +413,8 @@ function useSpeech() {
 
     parts.forEach((part, idx) => {
       const utt = new SpeechSynthesisUtterance(part);
-      utt.lang = "es-ES";
-      utt.rate = 1.0;      // natural pace; slower actually sounds more robotic
+      utt.lang = lang;
+      utt.rate = voicePref.rate || 1.0;
       utt.pitch = 1.0;
       utt.volume = 1.0;
       if (voice) utt.voice = voice;
@@ -400,7 +435,7 @@ function useSpeech() {
 
     // No pause/resume keep-alive here: that trick fixes desktop Chrome but on
     // Android it interrupts playback, which is worse than the problem.
-  }, [pickVoice, splitForSpeech]);
+  }, [pickVoice, splitForSpeech, voicePref]);
 
   const stopSpeaking = React.useCallback(() => {
     window.speechSynthesis?.cancel();
@@ -408,7 +443,8 @@ function useSpeech() {
     setSpeaking(false);
   }, []);
 
-  return { listening, speaking, startListening, stopListening, speak, stopSpeaking };
+  return { listening, speaking, startListening, stopListening, speak, stopSpeaking,
+           voices, voicePref, setVoicePref };
 }
 
 
@@ -609,6 +645,75 @@ const SECTIONS=[
 
 // Everyday words people actually type, mapped to the category that solves them.
 // Without this, searching "grifo" or "nevera" finds nothing at all.
+
+// Languages the guide can be written in. `voice` is the BCP-47 tag handed to
+// the speech engine so the reading matches the text.
+
+// A short line in each language so the voice test is actually intelligible.
+const VOICE_SAMPLE={
+  es:"Esta es la voz que leerá tus guías. Paso uno: comprueba que se entiende bien.",
+  "es-419":"Esta es la voz que leerá tus guías. Paso uno: comprueba que se entienda bien.",
+  en:"This is the voice that will read your guides. Step one: check that it sounds clear.",
+  fr:"Voici la voix qui lira vos guides. Étape une : vérifiez qu'elle est bien claire.",
+  de:"Das ist die Stimme, die Ihre Anleitungen vorliest. Schritt eins: Prüfen Sie die Verständlichkeit.",
+  it:"Questa è la voce che leggerà le tue guide. Passo uno: verifica che si capisca bene.",
+  pt:"Esta é a voz que irá ler os seus guias. Passo um: verifique se se percebe bem.",
+  "pt-BR":"Esta é a voz que vai ler seus guias. Passo um: verifique se está bem claro.",
+  ca:"Aquesta és la veu que llegirà les teves guies. Pas u: comprova que s'entengui bé.",
+  gl:"Esta é a voz que lerá as túas guías. Paso un: comproba que se entenda ben.",
+  eu:"Hau da zure gidak irakurriko dituen ahotsa. Lehen urratsa: egiaztatu ondo ulertzen dela.",
+  nl:"Dit is de stem die je gidsen voorleest. Stap één: controleer of het duidelijk klinkt.",
+  pl:"To jest głos, który przeczyta twoje poradniki. Krok pierwszy: sprawdź, czy brzmi wyraźnie.",
+  ro:"Aceasta este vocea care îți va citi ghidurile. Pasul unu: verifică dacă se aude clar.",
+  sv:"Det här är rösten som läser dina guider. Steg ett: kontrollera att den låter tydlig.",
+  da:"Dette er stemmen, der læser dine guides. Trin et: tjek at den lyder tydelig.",
+  no:"Dette er stemmen som leser veiledningene dine. Trinn én: sjekk at den høres tydelig ut.",
+  fi:"Tämä on ääni, joka lukee oppaasi. Vaihe yksi: tarkista, että se kuuluu selvästi.",
+  cs:"Toto je hlas, který bude číst vaše návody. Krok jedna: zkontrolujte, že je dobře rozumět.",
+  el:"Αυτή είναι η φωνή που θα διαβάζει τους οδηγούς σας. Βήμα ένα: ελέγξτε ότι ακούγεται καθαρά.",
+  tr:"Bu, kılavuzlarınızı okuyacak ses. Birinci adım: net duyulduğunu kontrol edin.",
+  ru:"Это голос, который будет читать ваши инструкции. Шаг первый: проверьте, что всё понятно.",
+  uk:"Це голос, який читатиме ваші інструкції. Крок перший: перевірте, чи добре чутно.",
+  ar:"هذا هو الصوت الذي سيقرأ أدلتك. الخطوة الأولى: تأكد من وضوحه.",
+  he:"זה הקול שיקריא את המדריכים שלך. שלב ראשון: בדוק שזה נשמע ברור.",
+  hi:"यह वह आवाज़ है जो आपकी गाइड पढ़ेगी। पहला चरण: जाँचें कि यह स्पष्ट सुनाई दे।",
+  zh:"这是将朗读您指南的声音。第一步：确认听起来清晰。",
+  ja:"これはガイドを読み上げる音声です。ステップ一：聞き取りやすいか確認してください。",
+  ko:"이것은 가이드를 읽어 줄 목소리입니다. 1단계: 잘 들리는지 확인하세요.",
+};
+
+const LANGUAGES=[
+  {code:"es", label:"Español",    native:"Español",     voice:"es-ES", flag:"🇪🇸"},
+  {code:"es-419",label:"Español (Latinoamérica)",native:"Español LA",voice:"es-MX",flag:"🌎"},
+  {code:"en", label:"Inglés",     native:"English",     voice:"en-US", flag:"🇬🇧"},
+  {code:"fr", label:"Francés",    native:"Français",    voice:"fr-FR", flag:"🇫🇷"},
+  {code:"de", label:"Alemán",     native:"Deutsch",     voice:"de-DE", flag:"🇩🇪"},
+  {code:"it", label:"Italiano",   native:"Italiano",    voice:"it-IT", flag:"🇮🇹"},
+  {code:"pt", label:"Portugués",  native:"Português",   voice:"pt-PT", flag:"🇵🇹"},
+  {code:"pt-BR",label:"Portugués (Brasil)",native:"Português BR",voice:"pt-BR",flag:"🇧🇷"},
+  {code:"ca", label:"Catalán",    native:"Català",      voice:"ca-ES", flag:"🏴"},
+  {code:"gl", label:"Gallego",    native:"Galego",      voice:"gl-ES", flag:"🏴"},
+  {code:"eu", label:"Euskera",    native:"Euskara",     voice:"eu-ES", flag:"🏴"},
+  {code:"nl", label:"Neerlandés", native:"Nederlands",  voice:"nl-NL", flag:"🇳🇱"},
+  {code:"pl", label:"Polaco",     native:"Polski",      voice:"pl-PL", flag:"🇵🇱"},
+  {code:"ro", label:"Rumano",     native:"Română",      voice:"ro-RO", flag:"🇷🇴"},
+  {code:"sv", label:"Sueco",      native:"Svenska",     voice:"sv-SE", flag:"🇸🇪"},
+  {code:"da", label:"Danés",      native:"Dansk",       voice:"da-DK", flag:"🇩🇰"},
+  {code:"no", label:"Noruego",    native:"Norsk",       voice:"nb-NO", flag:"🇳🇴"},
+  {code:"fi", label:"Finés",      native:"Suomi",       voice:"fi-FI", flag:"🇫🇮"},
+  {code:"cs", label:"Checo",      native:"Čeština",     voice:"cs-CZ", flag:"🇨🇿"},
+  {code:"el", label:"Griego",     native:"Ελληνικά",    voice:"el-GR", flag:"🇬🇷"},
+  {code:"tr", label:"Turco",      native:"Türkçe",      voice:"tr-TR", flag:"🇹🇷"},
+  {code:"ru", label:"Ruso",       native:"Русский",     voice:"ru-RU", flag:"🇷🇺"},
+  {code:"uk", label:"Ucraniano",  native:"Українська",  voice:"uk-UA", flag:"🇺🇦"},
+  {code:"ar", label:"Árabe",      native:"العربية",      voice:"ar-SA", flag:"🇸🇦"},
+  {code:"he", label:"Hebreo",     native:"עברית",        voice:"he-IL", flag:"🇮🇱"},
+  {code:"hi", label:"Hindi",      native:"हिन्दी",         voice:"hi-IN", flag:"🇮🇳"},
+  {code:"zh", label:"Chino",      native:"中文",         voice:"zh-CN", flag:"🇨🇳"},
+  {code:"ja", label:"Japonés",    native:"日本語",        voice:"ja-JP", flag:"🇯🇵"},
+  {code:"ko", label:"Coreano",    native:"한국어",        voice:"ko-KR", flag:"🇰🇷"},
+];
+
 const SYNONYMS={
   plomeria:["grifo","cañeria","tuberia","fuga","agua","desague","cisterna","wc","inodoro","atasco","sifon","fontaneria","gotea"],
   electricidad_hogar:["enchufe","luz","bombilla","interruptor","diferencial","cuadro","cable","corriente","apagon","led"],
@@ -2262,7 +2367,23 @@ export default function Maestro(){
   const [darkMode,setDarkMode]=useState(false);
   const [lang,setLang]=useState("es");
   const [level,setLevel]=useState("normal"); // "simple" | "normal" | "experto"
-  const { listening, speaking, startListening, stopListening, speak, stopSpeaking } = useSpeech();
+  const [guideLang,setGuideLang]=useState(()=>{
+    try{
+      const saved=localStorage.getItem("maestro_lang");
+      if(saved) return saved;
+      // Default to the device language when it is one we offer.
+      const dev=(navigator.language||"es").toLowerCase();
+      const hit=LANGUAGES.find(l=>dev===l.code.toLowerCase())
+             || LANGUAGES.find(l=>dev.split("-")[0]===l.code.split("-")[0]);
+      return hit?hit.code:"es";
+    }catch(e){return "es";}
+  });
+  React.useEffect(()=>{
+    try{localStorage.setItem("maestro_lang",guideLang);}catch(e){}
+  },[guideLang]);
+  const langInfo=LANGUAGES.find(l=>l.code===guideLang)||LANGUAGES[0];
+  const { listening, speaking, startListening, stopListening, speak, stopSpeaking,
+          voices, voicePref, setVoicePref } = useSpeech();
 
   // Speak the welcome question once on first interaction
   React.useEffect(()=>{
@@ -2332,7 +2453,11 @@ export default function Maestro(){
     if(!problem.trim()) return;
     setLoading(true);setScreen("guide");setCompletedSteps([]);setGuide(null);
     const lvlStr=level==="simple"?"Use very simple language for beginners, avoid technical terms, max 5 steps":level==="experto"?"Use technical professional language with advanced detail, 7-8 steps":"Use clear practical language, 5-7 steps";
-    const sys="You are a universal expert. Respond ONLY with valid JSON. Keys: titulo, dificultad (Facil/Moderado/Dificil/Experto), tiempo, herramientas (array), pasos (array of {titulo,descripcion,consejo}), advertencia, cuando_llamar_profesional. "+lvlStr+". In Spanish.";
+    // The JSON keys stay in Spanish because the app reads them; only the values
+    // are translated. Saying so explicitly avoids the model renaming the keys.
+    const sys="You are a universal expert. Respond ONLY with valid JSON. Keys (keep these key names exactly as given, in Spanish): titulo, dificultad, tiempo, herramientas (array), pasos (array of {titulo,descripcion,consejo}), advertencia, cuando_llamar_profesional. "
+      +lvlStr+". Write ALL values in "+langInfo.label+" ("+langInfo.native+"). "
+      +"The dificultad value must be one of: Facil, Moderado, Dificil, Experto - keep those in Spanish.";
     const usr="Categoria: "+selectedCategory.label+". Consulta: "+problem+". Solo JSON.";
     const parse=(raw)=>{let p=null;try{p=JSON.parse(raw);}catch(e){}if(!p){try{const clean=raw.replace(/^```(?:json)?/i,"").replace(/```$/,"").trim();p=JSON.parse(clean);}catch(e){}}if(!p){try{const m=raw.match(/\{[\s\S]*\}/);if(m)p=JSON.parse(m[0]);}catch(e){}}return p;};
     try{
@@ -2482,7 +2607,7 @@ export default function Maestro(){
       const parsed=parse(raw);
       if(!parsed){setGuide({error:true,msg:"Error al parsear respuesta.",raw:raw.slice(0,300)});return;}
       setGuide(parsed);
-      const newEntry={id:Date.now(),category:selectedCategory,problem,guide:parsed,date:new Date().toLocaleDateString("es-ES"),ai:aiProvider};
+      const newEntry={id:Date.now(),category:selectedCategory,problem,guide:parsed,date:new Date().toLocaleDateString("es-ES"),ai:aiProvider,lang:guideLang};
       setActiveGuideId(newEntry.id);
       setHistory(prev=>[newEntry,...prev.slice(0,49)]);
     }catch(e){setGuide({error:true,msg:e.message||"Error de red."});}
@@ -2578,6 +2703,58 @@ export default function Maestro(){
             </button>
 
             <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid rgba(0,180,255,0.12)"}}>
+              <p style={{fontFamily:"monospace",fontSize:12,color:"#00cfff",marginBottom:8}}>🔊 Voz de lectura</p>
+              {voices.length===0?(
+                <p style={{fontSize:10,color:"#4a5a6a",fontFamily:"monospace",marginBottom:14,lineHeight:1.5}}>
+                  Este dispositivo no ofrece voces en español. Puedes añadirlas
+                  desde los ajustes del sistema, en Texto a voz.
+                </p>
+              ):(
+                <>
+                  <select value={voicePref.name}
+                    onChange={e=>setVoicePref(p=>({...p,name:e.target.value}))}
+                    style={{width:"100%",background:"rgba(0,0,0,0.45)",
+                            border:"1px solid rgba(0,180,255,0.25)",borderRadius:4,
+                            color:"#cfe8f5",padding:"9px 11px",fontFamily:"monospace",
+                            fontSize:12,boxSizing:"border-box",marginBottom:9}}>
+                    <option value="">Automática (la mejor disponible)</option>
+                    {voices.map(v=>(
+                      <option key={v.name} value={v.name}>
+                        {v.name} · {v.lang}{v.localService?"":" · en línea"}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:9}}>
+                    <span style={{fontFamily:"monospace",fontSize:11,color:"#667",flexShrink:0}}>
+                      Velocidad
+                    </span>
+                    <input type="range" min="0.6" max="1.5" step="0.05"
+                      value={voicePref.rate}
+                      onChange={e=>setVoicePref(p=>({...p,rate:parseFloat(e.target.value)}))}
+                      style={{flex:1,accentColor:"#00cfff"}}/>
+                    <span style={{fontFamily:"monospace",fontSize:11,color:"#00cfff",
+                                  width:34,textAlign:"right",flexShrink:0}}>
+                      {voicePref.rate.toFixed(2)}×
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={()=>speaking
+                      ? stopSpeaking()
+                      : speak(VOICE_SAMPLE[guideLang]||VOICE_SAMPLE[guideLang.split("-")[0]]||VOICE_SAMPLE.es,langInfo.voice)}
+                    style={{width:"100%",padding:"9px",borderRadius:4,
+                            border:`1px solid ${speaking?"rgba(255,80,80,0.35)":"rgba(0,180,255,0.25)"}`,
+                            background:speaking?"rgba(255,80,80,0.12)":"rgba(0,180,255,0.08)",
+                            color:speaking?"#ff6b6b":"#00cfff",fontFamily:"monospace",
+                            fontSize:11,cursor:"pointer",marginBottom:14}}>
+                    {speaking?"⏹ Detener":"▶ Probar esta voz"}
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div style={{marginTop:4,paddingTop:14,borderTop:"1px solid rgba(0,180,255,0.12)"}}>
               <p style={{fontFamily:"monospace",fontSize:12,color:"#00cfff",marginBottom:8}}>💾 Copia de seguridad</p>
               <div style={{display:"flex",gap:7,marginBottom:6}}>
                 <button onClick={exportHistory}
@@ -2900,7 +3077,35 @@ export default function Maestro(){
               </button>
             </div>
             </ColumnFrame>
-            <p style={{fontSize:13,color:"#555",fontFamily:"monospace",marginTop:12}}>// Cuanto más detallado seas, mejor será la guía</p>
+
+            {/* Language and depth of the guide, kept outside the temple so the
+                oracle stays uncluttered. */}
+            <div style={{display:"flex",gap:8,marginTop:12,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{fontFamily:"monospace",fontSize:11,color:"#556"}}>// Idioma:</span>
+              <select value={guideLang} onChange={e=>setGuideLang(e.target.value)}
+                style={{background:"rgba(0,8,20,0.85)",border:"1px solid rgba(0,180,255,0.25)",
+                        borderRadius:4,color:"#00cfff",fontFamily:"monospace",fontSize:11,
+                        padding:"5px 8px",cursor:"pointer",maxWidth:180}}>
+                {LANGUAGES.map(l=>(
+                  <option key={l.code} value={l.code}>{l.flag} {l.native}</option>
+                ))}
+              </select>
+
+              <span style={{fontFamily:"monospace",fontSize:11,color:"#556",marginLeft:6}}>// Nivel:</span>
+              {[["simple","🟢"],["normal","🟡"],["experto","🔴"]].map(([v,dot])=>(
+                <button key={v} onClick={()=>setLevel(v)}
+                  title={v==="simple"?"Principiante":v==="normal"?"Intermedio":"Experto"}
+                  style={{padding:"5px 10px",borderRadius:4,
+                          border:`1px solid ${level===v?"rgba(0,180,255,0.5)":"rgba(255,255,255,0.09)"}`,
+                          background:level===v?"rgba(0,180,255,0.14)":"transparent",
+                          color:level===v?"#00cfff":"#556",fontSize:11,fontFamily:"monospace",
+                          cursor:"pointer",transition:"all .25s var(--ease-soft)"}}>
+                  {dot} {v==="simple"?"Básico":v==="normal"?"Normal":"Experto"}
+                </button>
+              ))}
+            </div>
+
+            <p style={{fontSize:12,color:"#455",fontFamily:"monospace",marginTop:10}}>// Cuanto más detallado seas, mejor será la guía</p>
           </div>
         )}
 
@@ -2916,7 +3121,7 @@ export default function Maestro(){
                   <div>
                     <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
                       <h2 style={{fontSize:21,fontWeight:"bold",margin:"0 0 10px",lineHeight:1.3,fontFamily:"Georgia,'Times New Roman',serif",flex:1}}>{guide.titulo}</h2>
-                      <button onClick={()=>speaking?stopSpeaking():speak(buildNarration(guide))}
+                      <button onClick={()=>speaking?stopSpeaking():speak(buildNarration(guide),(LANGUAGES.find(l=>l.code===(guide.lang||guideLang))||langInfo).voice)}
                         style={{width:36,height:36,borderRadius:"50%",border:`2px solid ${speaking?"#8a2f18":"rgba(0,180,255,0.3)"}`,background:speaking?"rgba(255,80,80,0.15)":"rgba(0,180,255,0.08)",color:speaking?"#8a2f18":"#3b2f1c",fontSize:18,cursor:"pointer",flexShrink:0}}>
                         {speaking?"⏹":"🔊"}
                       </button>
