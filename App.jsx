@@ -1870,6 +1870,144 @@ function OrbitalHome({onSelect}){
 
 // A blank spinner for fifteen seconds feels broken. Naming what is happening,
 // and letting each stage tick over, makes the wait legible.
+
+// A sheet of papyrus: torn edges, horizontal and vertical fibres, blotches and
+// a soft crease down the middle. Everything is drawn, so it scales cleanly and
+// weighs nothing.
+function Papyrus({children,tint="#c9a227"}){
+  // The sheet used to be a full-size SVG with live turbulence filters, which
+  // the browser re-evaluates while scrolling; on weaker devices that made the
+  // text flicker and disappear. The texture is now painted once into a small
+  // tiling image, so scrolling costs nothing.
+  const texture=React.useMemo(()=>{
+    const S=256;
+    const c=document.createElement("canvas");
+    c.width=S; c.height=S;
+    const x=c.getContext("2d");
+    const g=x.createLinearGradient(0,0,S,S);
+    g.addColorStop(0,"#e8d9b0"); g.addColorStop(0.3,"#dfcda0");
+    g.addColorStop(0.6,"#e6d7ad"); g.addColorStop(1,"#d3bf91");
+    x.fillStyle=g; x.fillRect(0,0,S,S);
+    for(let i=0;i<420;i++){
+      const y=Math.random()*S, w=6+Math.random()*70, a=0.02+Math.random()*0.06;
+      x.strokeStyle="rgba("+(140+Math.random()*40|0)+","+(118+Math.random()*36|0)+","+(70+Math.random()*30|0)+","+a+")";
+      x.lineWidth=0.6+Math.random()*1.5;
+      x.beginPath(); x.moveTo(Math.random()*S,y);
+      x.lineTo(Math.random()*S+w,y+(Math.random()-0.5)*1.6); x.stroke();
+    }
+    for(let i=0;i<260;i++){
+      const px=Math.random()*S, h=6+Math.random()*60, a=0.015+Math.random()*0.045;
+      x.strokeStyle="rgba("+(132+Math.random()*36|0)+","+(112+Math.random()*30|0)+","+(66+Math.random()*26|0)+","+a+")";
+      x.lineWidth=0.5+Math.random()*1.2;
+      x.beginPath(); x.moveTo(px,Math.random()*S);
+      x.lineTo(px+(Math.random()-0.5)*1.6,Math.random()*S+h); x.stroke();
+    }
+    for(let i=0;i<26;i++){
+      const bx=Math.random()*S, by=Math.random()*S, r=8+Math.random()*34;
+      const bg=x.createRadialGradient(bx,by,0,bx,by,r);
+      bg.addColorStop(0,"rgba(150,120,66,"+(0.05+Math.random()*0.07)+")");
+      bg.addColorStop(1,"rgba(150,120,66,0)");
+      x.fillStyle=bg; x.beginPath(); x.arc(bx,by,r,0,Math.PI*2); x.fill();
+    }
+    return c.toDataURL("image/png");
+  },[]);
+
+  // Real torn paper has uneven spacing and the odd deep tear, not evenly
+  // spaced bumps. Each sheet gets its own outline.
+  const tornEdge=React.useMemo(()=>{
+    let seed=Math.floor(Math.random()*99999)+1;
+    const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+    const pts=[];
+    const side=(from,to,axis,near)=>{
+      let t=0;
+      while(t<1){
+        t=Math.min(1,t+0.020+rnd()*0.055);
+        // Papyrus wears at the edge rather than tearing: mostly shallow
+        // irregularity with the occasional slightly deeper nick.
+        // Kept shallow on purpose: the clip path cuts pixels, so a deep bite
+        // would slice into the words rather than just the margin.
+        const deep=rnd()<0.08;
+        const bite=deep?(0.35+rnd()*0.35):(0.03+rnd()*0.22);
+        const v=near?bite:100-bite;
+        const along=from+(to-from)*t;
+        pts.push(axis==="x"?[along,v]:[v,along]);
+      }
+    };
+    side(0,100,"x",true, 0.22);   // top    - shallow, height is the long axis
+    side(0,100,"y",false,1);      // right  - full depth, measured on width
+    side(100,0,"x",false,0.22);   // bottom
+    side(100,0,"y",true, 1);      // left
+    return "polygon("+pts.map(([x,y])=>x.toFixed(1)+"% "+y.toFixed(1)+"%").join(", ")+")";
+  },[]);
+
+  const edgeWear=React.useMemo(()=>{
+    let seed=Math.floor(Math.random()*99999)+1;
+    const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+    const layers=[];
+    // corners: always the most handled part of a sheet
+    [[0,0],[100,0],[0,100],[100,100]].forEach(([cx,cy])=>{
+      const a=(0.34+rnd()*0.20).toFixed(2), r=(17+rnd()*11).toFixed(0);
+      layers.push(`radial-gradient(circle at ${cx}% ${cy}%, rgba(118,96,52,${a}), transparent ${r}%)`);
+    });
+    // scattered patches along top and bottom
+    for(let i=0;i<5;i++){
+      const x=(6+rnd()*88).toFixed(0), y=rnd()<0.5?0:100;
+      const w=(16+rnd()*26).toFixed(0), h=(4+rnd()*4).toFixed(0);
+      const a=(0.16+rnd()*0.22).toFixed(2);
+      layers.push(`radial-gradient(ellipse ${w}% ${h}% at ${x}% ${y}%, rgba(126,104,58,${a}), transparent)`);
+    }
+    // and down the two sides
+    for(let i=0;i<4;i++){
+      const y=(8+rnd()*84).toFixed(0), x=rnd()<0.5?0:100;
+      const w=(4+rnd()*4).toFixed(0), h=(14+rnd()*20).toFixed(0);
+      const a=(0.14+rnd()*0.20).toFixed(2);
+      layers.push(`radial-gradient(ellipse ${w}% ${h}% at ${x}% ${y}%, rgba(126,104,58,${a}), transparent)`);
+    }
+    layers.push("linear-gradient(180deg,rgba(132,110,64,.15),transparent 5%,transparent 95%,rgba(132,110,64,.17))");
+    return layers.join(",");
+  },[]);
+
+  return(
+    <div style={{position:"relative",margin:"0 0 20px",padding:"30px 28px 34px",
+                 backgroundColor:"#dfcda0",
+                 backgroundImage:"url("+texture+")",
+                 backgroundSize:"256px 256px",
+                 boxShadow:"0 8px 22px rgba(0,0,0,.55), inset 0 0 60px rgba(140,112,60,.22)",
+                 clipPath:tornEdge,
+                 overflow:"hidden"}}>
+      <div aria-hidden style={{position:"absolute",top:0,bottom:0,left:"49.5%",width:4,
+                               background:"linear-gradient(90deg,rgba(176,156,104,.30),rgba(240,228,194,.24))",
+                               pointerEvents:"none"}}/>
+      {/* Wear is uneven and different on every sheet: corners take the worst
+          of it, then scattered patches along each edge. */}
+      <div aria-hidden style={{position:"absolute",inset:0,pointerEvents:"none",background:edgeWear}}/>
+
+      {/* A thin bright lip just inside the tear: torn fibre catches the light
+          before the edge falls into shadow. */}
+      <div aria-hidden style={{position:"absolute",inset:0,pointerEvents:"none",
+        background:
+          "linear-gradient(180deg,rgba(248,238,208,.30) 0 1.5px,transparent 3px),"+
+          "linear-gradient(0deg,  rgba(248,238,208,.24) 0 1.5px,transparent 3px),"+
+          "linear-gradient(90deg, rgba(248,238,208,.22) 0 1.5px,transparent 3px),"+
+          "linear-gradient(270deg,rgba(248,238,208,.26) 0 1.5px,transparent 3px)"
+      }}/>
+
+      {/* Frayed fibre ends, denser at top and bottom where the weave is cut
+          across rather than along. */}
+      <div aria-hidden style={{position:"absolute",inset:0,pointerEvents:"none",
+        background:"repeating-linear-gradient(90deg,rgba(146,122,70,.13) 0 1px,transparent 1px 3px)",
+        WebkitMaskImage:"linear-gradient(180deg,#000 0,transparent 7px),linear-gradient(0deg,#000 0,transparent 7px)",
+        maskImage:"linear-gradient(180deg,#000 0,transparent 7px),linear-gradient(0deg,#000 0,transparent 7px)"}}/>
+      <div aria-hidden style={{position:"absolute",inset:0,pointerEvents:"none",
+        background:"repeating-linear-gradient(180deg,rgba(146,122,70,.09) 0 1px,transparent 1px 4px)",
+        WebkitMaskImage:"linear-gradient(90deg,#000 0,transparent 5px),linear-gradient(270deg,#000 0,transparent 5px)",
+        maskImage:"linear-gradient(90deg,#000 0,transparent 5px),linear-gradient(270deg,#000 0,transparent 5px)"}}/>
+
+      <div style={{position:"relative"}}>{children}</div>
+    </div>
+  );
+}
+
 function LoadingStages({color,category,note}){
   const STEPS=[
     "Leyendo tu descripción",
@@ -2770,98 +2908,98 @@ export default function Maestro(){
           <div style={{animation:"fadeIn .45s var(--ease-out) both"}}>
             {loading&&<LoadingStages color={accentColor} category={selectedCategory?.label} note={loadingNote}/>}
             {!loading&&guide&&!guide.error&&(
-              <div>
+              <Papyrus tint={accentColor}>
                 <div style={{display:"flex",gap:16,alignItems:"flex-start",marginBottom:16}}>
-                  <div style={{width:44,height:44,marginTop:4,flexShrink:0,filter:`drop-shadow(0 0 8px ${accentColor})`}}>
+                  <div style={{width:44,height:44,marginTop:4,flexShrink:0,filter:"drop-shadow(0 1px 2px rgba(0,0,0,.3))"}}>
                     {selectedCategory&&ICONS[selectedCategory.id]&&<CyberIcon d={ICONS[selectedCategory.id].d} d2={ICONS[selectedCategory.id].d2} color={accentColor} size={40} gradId={`guide_${selectedCategory.id}`}/>}
                   </div>
                   <div>
                     <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-                      <h2 style={{fontSize:21,fontWeight:"bold",margin:"0 0 10px",lineHeight:1.3,fontFamily:"monospace",flex:1}}>{guide.titulo}</h2>
+                      <h2 style={{fontSize:21,fontWeight:"bold",margin:"0 0 10px",lineHeight:1.3,fontFamily:"Georgia,'Times New Roman',serif",flex:1}}>{guide.titulo}</h2>
                       <button onClick={()=>speaking?stopSpeaking():speak(buildNarration(guide))}
-                        style={{width:36,height:36,borderRadius:"50%",border:`2px solid ${speaking?"#ff6b6b":"rgba(0,180,255,0.3)"}`,background:speaking?"rgba(255,80,80,0.15)":"rgba(0,180,255,0.08)",color:speaking?"#ff6b6b":"#00cfff",fontSize:18,cursor:"pointer",flexShrink:0}}>
+                        style={{width:36,height:36,borderRadius:"50%",border:`2px solid ${speaking?"#8a2f18":"rgba(0,180,255,0.3)"}`,background:speaking?"rgba(255,80,80,0.15)":"rgba(0,180,255,0.08)",color:speaking?"#8a2f18":"#3b2f1c",fontSize:18,cursor:"pointer",flexShrink:0}}>
                         {speaking?"⏹":"🔊"}
                       </button>
                     </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
-                      {guide.dificultad&&<span style={{padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:"bold",fontFamily:"monospace",background:(diffColor[guide.dificultad]||"#aaa")+"28",color:diffColor[guide.dificultad]||"#aaa"}}>{guide.dificultad}</span>}
-                      <span style={{fontSize:12,color:"#666",fontFamily:"monospace"}}>⏱ {guide.tiempo}</span>
-                      <span style={{fontSize:12,color:"#666",fontFamily:"monospace"}}>✅ {completedSteps.length}/{guide.pasos?.length||0} pasos</span>
+                      {guide.dificultad&&<span style={{padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:"bold",fontFamily:"Georgia,'Times New Roman',serif",background:(diffColor[guide.dificultad]||"#aaa")+"28",color:diffColor[guide.dificultad]||"#aaa"}}>{guide.dificultad}</span>}
+                      <span style={{fontSize:12,color:"#584627",fontFamily:"Georgia,'Times New Roman',serif"}}>⏱ {guide.tiempo}</span>
+                      <span style={{fontSize:12,color:"#584627",fontFamily:"Georgia,'Times New Roman',serif"}}>✅ {completedSteps.length}/{guide.pasos?.length||0} pasos</span>
                     </div>
                   </div>
                 </div>
 
                 <div style={{display:"flex",justifyContent:"flex-end",marginBottom:16}}>
-                  <button onClick={()=>window.print()} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"rgba(0,15,0,0.8)",border:"1px solid rgba(0,255,65,0.2)",borderRadius:4,color:"#00cc33",fontSize:12,fontFamily:"monospace",cursor:"pointer",fontWeight:"600"}}>📄 Guardar PDF</button>
+                  <button onClick={()=>window.print()} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,color:"#2f5e2a",fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",cursor:"pointer",fontWeight:"600"}}>📄 Guardar PDF</button>
                 </div>
 
-                <div style={{height:4,background:"rgba(0,255,65,0.08)",borderRadius:2,marginBottom:24,overflow:"hidden"}}>
-                  <div style={{height:"100%",borderRadius:2,transition:"width .55s var(--ease-out)",background:accentColor,width:`${guide.pasos?(completedSteps.length/guide.pasos.length)*100:0}%`}}/>
+                <div style={{height:4,background:"rgba(120,98,58,0.16)",borderRadius:2,marginBottom:24,overflow:"hidden"}}>
+                  <div style={{height:"100%",borderRadius:2,transition:"width .55s var(--ease-out)",background:"#584627",width:`${guide.pasos?(completedSteps.length/guide.pasos.length)*100:0}%`}}/>
                 </div>
 
-                {guide.advertencia&&<div style={{display:"flex",gap:12,background:"rgba(40,0,0,0.88)",border:"1px solid rgba(255,80,80,0.3)",borderRadius:4,padding:"13px 16px",marginBottom:20,alignItems:"flex-start"}}><span>⚠️</span><p style={{margin:0,fontSize:14,color:"#ffb3b3",lineHeight:1.55,fontFamily:"monospace"}}>{guide.advertencia}</p></div>}
+                {guide.advertencia&&<div style={{display:"flex",gap:12,background:"rgba(150,60,30,0.14)",border:"1px solid rgba(150,60,30,0.4)",borderRadius:4,padding:"13px 16px",marginBottom:20,alignItems:"flex-start"}}><span>⚠️</span><p style={{margin:0,fontSize:14,color:"#8a3a1e",lineHeight:1.55,fontFamily:"Georgia,'Times New Roman',serif"}}>{guide.advertencia}</p></div>}
 
                 {guide.herramientas?.length>0&&(
-                  <div style={{background:"rgba(0,12,0,0.85)",border:"1px solid rgba(0,255,65,0.12)",borderRadius:4,padding:"16px 20px",marginBottom:24}}>
-                    <h3 style={{fontSize:13,fontWeight:"bold",color:"#777",margin:"0 0 12px",fontFamily:"monospace",letterSpacing:"0.06em",textTransform:"uppercase"}}>🧰 Herramientas y materiales</h3>
+                  <div style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"16px 20px",marginBottom:24}}>
+                    <h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 12px",fontFamily:"Georgia,'Times New Roman',serif",letterSpacing:"0.06em",textTransform:"uppercase"}}>🧰 Herramientas y materiales</h3>
                     <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                      {guide.herramientas.map((t,i)=><span key={i} style={{background:"rgba(0,255,65,0.07)",border:"1px solid rgba(0,255,65,0.15)",borderRadius:4,padding:"4px 12px",fontSize:13,fontFamily:"monospace",color:"#c8ffd4"}}>{t}</span>)}
+                      {guide.herramientas.map((t,i)=><span key={i} style={{background:"rgba(120,98,58,0.16)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"4px 12px",fontSize:13,fontFamily:"Georgia,'Times New Roman',serif",color:"#4a3c24"}}>{t}</span>)}
                     </div>
                   </div>
                 )}
 
-                <h3 style={{fontSize:13,fontWeight:"bold",color:"#777",margin:"0 0 14px",fontFamily:"monospace",letterSpacing:"0.06em",textTransform:"uppercase"}}>📋 Pasos a seguir</h3>
+                <h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 14px",fontFamily:"Georgia,'Times New Roman',serif",letterSpacing:"0.06em",textTransform:"uppercase"}}>📋 Pasos a seguir</h3>
                 <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:28}}>
                   {guide.pasos?.map((paso,i)=>{
                     const done=completedSteps.includes(i);
                     const query=encodeURIComponent((selectedCategory?.label||"")+" "+paso.titulo);
                     return(
-                      <div key={i} style={{border:`1px solid ${done?accentColor:"rgba(0,255,65,0.12)"}`,borderRadius:4,overflow:"hidden",transition:"background .3s var(--ease-soft), border-color .3s var(--ease-soft), color .3s var(--ease-soft)",background:done?accentColor+"22":"rgba(0,10,0,0.75)"}}>
+                      <div key={i} style={{border:`1px solid ${done?"rgba(90,72,40,0.55)":"rgba(120,98,58,0.32)"}`,borderRadius:4,overflow:"hidden",transition:"background .3s var(--ease-soft), border-color .3s var(--ease-soft), color .3s var(--ease-soft)",background:done?"rgba(120,98,58,0.20)":"rgba(160,138,90,0.10)"}}>
                         <div onClick={()=>toggleStep(i)} style={{display:"flex",gap:14,padding:"15px 17px",cursor:"pointer"}}>
-                          <div style={{width:30,height:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold",fontFamily:"monospace",transition:"background .3s var(--ease-soft), border-color .3s var(--ease-soft), color .3s var(--ease-soft)",flexShrink:0,marginTop:2,background:done?accentColor:"rgba(0,255,65,0.1)",color:done?"#000":"rgba(0,255,65,0.5)"}}>{done?"✓":i+1}</div>
+                          <div style={{width:30,height:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold",fontFamily:"Georgia,'Times New Roman',serif",transition:"background .3s var(--ease-soft), border-color .3s var(--ease-soft), color .3s var(--ease-soft)",flexShrink:0,marginTop:2,background:done?"#5c4a2c":"rgba(120,98,58,0.22)",color:done?"#f2e8cd":"#584627"}}>{done?"✓":i+1}</div>
                           <div style={{flex:1}}>
-                            <p style={{fontSize:15,fontWeight:"bold",margin:"0 0 6px",lineHeight:1.3,opacity:done?0.45:1,textDecoration:done?"line-through":"none",fontFamily:"monospace"}}>{paso.titulo}</p>
+                            <p style={{fontSize:15,fontWeight:"bold",margin:"0 0 6px",lineHeight:1.3,color:"#3b2f1c",opacity:done?0.45:1,textDecoration:done?"line-through":"none",fontFamily:"Georgia,'Times New Roman',serif"}}>{paso.titulo}</p>
                             {!done&&(
                               <>
-                                <p style={{fontSize:14,margin:"0 0 8px",color:"#c8ffd4",lineHeight:1.6,fontFamily:"monospace",opacity:0.8}}>{paso.descripcion}</p>
-                                {paso.consejo&&<div style={{display:"flex",gap:8,background:"rgba(233,196,106,0.07)",border:"1px solid rgba(233,196,106,0.15)",borderRadius:4,padding:"8px 12px",alignItems:"flex-start"}}><span>💡</span><span style={{fontSize:12,color:"#e9c46a",fontFamily:"monospace",lineHeight:1.5}}>{paso.consejo}</span></div>}
+                                <p style={{fontSize:14,margin:"0 0 8px",color:"#3f331e",lineHeight:1.6,fontFamily:"Georgia,'Times New Roman',serif"}}>{paso.descripcion}</p>
+                                {paso.consejo&&<div style={{display:"flex",gap:8,background:"rgba(140,105,40,0.16)",border:"1px solid rgba(140,105,40,0.35)",borderRadius:4,padding:"8px 12px",alignItems:"flex-start"}}><span>💡</span><span style={{fontSize:12,color:"#664a12",fontFamily:"Georgia,'Times New Roman',serif",lineHeight:1.5}}>{paso.consejo}</span></div>}
                               </>
                             )}
                             {done&&(
-                              <p style={{fontSize:11,margin:0,color:"#4a5a68",fontFamily:"monospace"}}>
+                              <p style={{fontSize:11,margin:0,color:"#584627",fontFamily:"Georgia,'Times New Roman',serif"}}>
                                 toca para desplegar
                               </p>
                             )}
                           </div>
                         </div>
-                        {!done&&<div style={{display:"flex",gap:8,padding:"10px 17px 13px 61px",borderTop:"1px solid rgba(0,255,65,0.07)"}}>
-                          <a href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:4,background:"rgba(255,0,0,0.12)",border:"1px solid rgba(255,0,0,0.25)",color:"#ff6b6b",fontSize:12,fontFamily:"monospace",textDecoration:"none",fontWeight:"600"}}>▶ YouTube</a>
-                          <a href={`https://www.google.com/search?tbm=isch&q=${query}`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:4,background:"rgba(66,133,244,0.12)",border:"1px solid rgba(66,133,244,0.25)",color:"#6ba3f5",fontSize:12,fontFamily:"monospace",textDecoration:"none",fontWeight:"600"}}>🖼 Imágenes</a>
+                        {!done&&<div style={{display:"flex",gap:8,padding:"10px 17px 13px 61px",borderTop:"1px solid rgba(120,98,58,0.22)"}}>
+                          <a href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:4,background:"rgba(163,52,23,0.14)",border:"1px solid rgba(163,52,23,0.35)",color:"#8f2a12",fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",textDecoration:"none",fontWeight:"600"}}>▶ YouTube</a>
+                          <a href={`https://www.google.com/search?tbm=isch&q=${query}`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:4,background:"rgba(31,79,138,0.13)",border:"1px solid rgba(31,79,138,0.32)",color:"#1f4f8a",fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",textDecoration:"none",fontWeight:"600"}}>🖼 Imágenes</a>
                         </div>}
                       </div>
                     );
                   })}
                 </div>
 
-                {guide.cuando_llamar_profesional&&<div style={{background:"rgba(0,15,0,0.85)",border:"1px solid rgba(0,255,65,0.1)",borderRadius:4,padding:"16px 20px",marginBottom:28}}><h3 style={{fontSize:13,fontWeight:"bold",color:"#777",margin:"0 0 10px",fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.06em"}}>👷 ¿Cuándo llamar a un profesional?</h3><p style={{margin:0,fontSize:14,color:"#aaa",lineHeight:1.6,fontFamily:"monospace"}}>{guide.cuando_llamar_profesional}</p></div>}
+                {guide.cuando_llamar_profesional&&<div style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"16px 20px",marginBottom:28}}><h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 10px",fontFamily:"Georgia,'Times New Roman',serif",textTransform:"uppercase",letterSpacing:"0.06em"}}>👷 ¿Cuándo llamar a un profesional?</h3><p style={{margin:0,fontSize:14,color:"#5c4a2c",lineHeight:1.6,fontFamily:"Georgia,'Times New Roman',serif"}}>{guide.cuando_llamar_profesional}</p></div>}
 
                 {guide.pasos&&completedSteps.length===guide.pasos.length&&(
-                  <div style={{textAlign:"center",background:"rgba(0,30,0,0.92)",border:"1px solid rgba(0,255,65,0.35)",borderRadius:4,padding:"32px 24px"}}>
+                  <div style={{textAlign:"center",background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"32px 24px"}}>
                     <span style={{fontSize:48}}>🎉</span>
-                    <h3 style={{fontSize:22,margin:"12px 0 8px",fontFamily:"monospace"}}>¡Problema resuelto!</h3>
-                    <p style={{color:"#888",margin:0,fontFamily:"monospace"}}>Has completado todos los pasos.</p>
+                    <h3 style={{fontSize:22,margin:"12px 0 8px",fontFamily:"Georgia,'Times New Roman',serif"}}>¡Problema resuelto!</h3>
+                    <p style={{color:"#584627",margin:0,fontFamily:"Georgia,'Times New Roman',serif"}}>Has completado todos los pasos.</p>
                     <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:12}}>
-                      <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#00cfff",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}} onClick={()=>{const t=guide.titulo+(guide.pasos?.map((p,i)=>"\n"+(i+1)+". "+p.titulo+"\n"+p.descripcion)||[]).join("");navigator.clipboard?.writeText(t).then(()=>alert("¡Copiado!"));}}>📋 COPIAR</button>
-                      <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#00cfff",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}} onClick={()=>window.print()}>📄 PDF</button>
-                      <button style={{padding:"12px 18px",border:"1px solid rgba(87,204,153,0.3)",borderRadius:4,color:"#57cc99",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}}
+                      <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#3b2f1c",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>{const t=guide.titulo+(guide.pasos?.map((p,i)=>"\n"+(i+1)+". "+p.titulo+"\n"+p.descripcion)||[]).join("");navigator.clipboard?.writeText(t).then(()=>alert("¡Copiado!"));}}>📋 COPIAR</button>
+                      <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#3b2f1c",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>window.print()}>📄 PDF</button>
+                      <button style={{padding:"12px 18px",border:"1px solid rgba(87,204,153,0.3)",borderRadius:4,color:"#2f5e3a",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}}
                         onClick={()=>{const t=encodeURIComponent("📋 Guía MAESTRO: "+guide.titulo+"\n\n"+(guide.pasos?.map((p,i)=>(i+1)+". "+p.titulo+"\n"+p.descripcion)||[]).join("\n\n"));window.open("https://wa.me/?text="+t,"_blank");}}>
                         💬 WHATSAPP
                       </button>
                     </div>
-                    <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,marginTop:20,fontFamily:"monospace"}} onClick={()=>reset()}>RESOLVER OTRO</button>
+                    <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#f2e8cd",fontSize:15,fontWeight:"bold",cursor:"pointer",background:"#5c4a2c",marginTop:20,fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>reset()}>RESOLVER OTRO</button>
                   </div>
                 )}
-              </div>
+              </Papyrus>
             )}
             {!loading&&guide?.error&&(
               <div style={{textAlign:"center",padding:40,color:"#ff6b6b",fontFamily:"monospace"}}>
