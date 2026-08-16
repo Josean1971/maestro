@@ -751,11 +751,33 @@ const ALL_CATS=SECTIONS.flatMap(s=>s.categories.map(c=>({...c,sectionColor:s.col
 // ── COLUMN FRAME WITH FLOATING CLOUDS ──
 function ColumnFrame({color,children,altarDelay=0}){
   const [t,setT]=React.useState(0);
+  const shakeRef=React.useRef(null);
   React.useEffect(()=>{
     let raf,last=performance.now();
     const loop=(now)=>{
       const dt=Math.min((now-last)/1000,0.05); last=now;
       setT(v=>v+dt);
+
+      // The temple physically shakes when the star lands. The transform is
+      // written straight to the node instead of through state, so the jolt
+      // runs at full frame rate without rerendering the whole scene.
+      const q=(typeof window!=="undefined"&&window.__maestroQuake)||0;
+      const el=shakeRef.current;
+      if(el){
+        if(q>0.002){
+          const ms=now/1000;
+          // Layered frequencies: a hard initial jolt over a slower sway, so it
+          // reads as masonry rather than as a vibrating phone.
+          const amp=q*13;
+          const dx=(Math.sin(ms*47)*0.6+Math.sin(ms*23.3)*0.4)*amp;
+          const dy=(Math.sin(ms*38.7)*0.55+Math.sin(ms*17.1)*0.45)*amp*0.75;
+          const rot=Math.sin(ms*29.4)*q*0.55;
+          el.style.transform=`translate(${dx.toFixed(2)}px,${dy.toFixed(2)}px) rotate(${rot.toFixed(3)}deg)`;
+        }else if(el.style.transform){
+          el.style.transform="";
+        }
+      }
+
       raf=requestAnimationFrame(loop);
     };
     raf=requestAnimationFrame(loop);
@@ -870,7 +892,7 @@ function ColumnFrame({color,children,altarDelay=0}){
   };
 
   return(
-    <div style={{position:"relative",width:"100%"}}>
+    <div ref={shakeRef} style={{position:"relative",width:"100%",willChange:"transform"}}>
       {/* ---- open sky above the temple ---- */}
       <div style={{position:"absolute",bottom:"100%",left:0,right:0,height:"42vh",
                    pointerEvents:"none",overflow:"hidden"}}>
@@ -1183,10 +1205,389 @@ function drawWrappedLabel(ctx,text,cx,topY,canvasW,maxLineW){
 // temple, sinks through the roof and settles as the oracle's altar. The temple
 // fades up underneath as it travels, so the two screens feel continuous.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Sound for the star's descent. Everything is synthesised, so there are no
+// files to load and nothing to go stale.
+//   - a low rumble that rises in pitch and volume as the star falls
+//   - a muffled thud on landing
+//   - a scatter of bell tones as the monolith rises
+// ---------------------------------------------------------------------------
+function playJourneySound(duration){
+  try{ if(localStorage.getItem("maestro_fx")==="off") return ()=>{}; }catch(e){}
+  try{ if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches) return ()=>{}; }catch(e){}
+
+  let ctx;
+  try{ ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return ()=>{}; }
+  if(ctx.state==="suspended") ctx.resume().catch(()=>{});
+
+  const D=duration/1000;
+  const SR=ctx.sampleRate;
+  const master=ctx.createGain();
+  master.gain.value=1.0;
+  // Stacked sub-bass would clip without this; the limiter lets the strike hit
+  // hard while keeping the peak under control.
+  // Gentle saturation generates harmonics of the sub-bass. A small speaker
+  // cannot move enough air for 20 Hz, but it reproduces the harmonics, and the
+  // ear reconstructs the missing fundamental - the bass is felt regardless.
+  const drive=ctx.createWaveShaper();
+  {
+    const N=1024, c=new Float32Array(N);
+    for(let i=0;i<N;i++){
+      const x=(i/(N-1))*2-1;
+      c[i]=Math.tanh(x*2.2)/Math.tanh(2.2);
+    }
+    drive.curve=c; drive.oversample="2x";
+  }
+  const limiter=ctx.createDynamicsCompressor();
+  limiter.threshold.value=-7;
+  limiter.knee.value=6;              // softer knee: squeezes, does not clamp
+  limiter.ratio.value=9;
+  // A slow attack lets the first few milliseconds through untouched, which is
+  // exactly the part the ear reads as force. A fast attack would flatten it.
+  limiter.attack.value=0.012;
+  limiter.release.value=0.45;
+  master.connect(drive);
+  drive.connect(limiter);
+  limiter.connect(ctx.destination);
+
+  // Filling the noise buffers takes a few hundred thousand samples of work.
+  // Reading the clock before that meant the audio was scheduled from an
+  // instant that had already passed by the time the animation began, which is
+  // why the sound ran a fraction ahead. Everything heavy happens first, then
+  // both clocks are read together.
+  const preLen=Math.ceil(SR*D+SR*0.4);
+  const preBuf=ctx.createBuffer(1,preLen,SR);
+  const pre=preBuf.getChannelData(0);
+  {
+    let b0=0,b1=0,b2=0;
+    for(let i=0;i<preLen;i++){
+      const w=Math.random()*2-1;
+      b0=0.99765*b0+w*0.0990460;
+      b1=0.96300*b1+w*0.2965164;
+      b2=0.57000*b2+w*1.0526913;
+      pre[i]=(b0+b1+b2+w*0.1848)*0.32;
+    }
+  }
+  const impLen=Math.ceil(SR*1.6);   // longer: it is played back slowed down
+  const impBuf=ctx.createBuffer(1,impLen,SR);
+  {
+    const d=impBuf.getChannelData(0);
+    let m0=0;
+    for(let i=0;i<impLen;i++){
+      const w=Math.random()*2-1;
+      m0=(m0+0.035*w)/1.035;
+      d[i]=m0*3.4*Math.pow(1-i/impLen,1.3);   // slower decay, more rubble
+    }
+  }
+
+  // A small lead so both media start on the same future instant, plus whatever
+  // the device needs to actually push audio out of the speaker.
+  const LEAD=0.08+(ctx.baseLatency||0)+(ctx.outputLatency||0);
+  const now=ctx.currentTime+LEAD;
+
+  // The visuals use this exact curve, so the sound is built from it too. The
+  // previous version ramped linearly and ran far ahead of the star.
+  // Climb and fall are different motions: rising loses speed as gravity
+  // bites, the apex is almost still, and the descent accelerates hard. One
+  // symmetric curve could not express that, which is why the arc felt flat.
+  const CLIMB=0.50, HANG=0.10;
+  const fall=(v)=>{
+    if(v<CLIMB){
+      const u=v/CLIMB;
+      return 0.40*(1-Math.pow(1-u,2.3));    // ascent, easing out
+    }
+    if(v<CLIMB+HANG){
+      const u=(v-CLIMB)/HANG;
+      return 0.40+0.03*u;                   // suspended at the top
+    }
+    // Clamped: at the junction the subtraction can land a hair below zero,
+    // and a negative base with a fractional exponent yields NaN.
+    const u=Math.max(0,Math.min(1,(v-CLIMB-HANG)/(1-CLIMB-HANG)));
+    return 0.43+0.57*Math.pow(u,2.5);       // descent, accelerating
+  };
+  const START=0.08, SPAN=0.72;                 // matches the animation phases
+  const tImpact=now+D*(START+SPAN);
+
+  // Sample the trajectory densely and schedule the sweep along it, so loudness
+  // and pitch track the star frame for frame rather than approximating it.
+  const STEPS=48;
+  const curve=[];
+  for(let i=0;i<=STEPS;i++){
+    const p=START+SPAN*(i/STEPS);
+    curve.push({t:now+D*p, k:fall(i/STEPS)});
+  }
+
+  // ---- entry roar ---------------------------------------------------------
+  // A meteor is heard as torn air: broadband noise, low at first because
+  // distance absorbs the highs, brightening as it closes in.
+  const roar=ctx.createBufferSource();
+  roar.buffer=preBuf;
+
+  // Distance is mostly a low-pass: far away you hear only the rumble, and the
+  // hiss arrives as it gets close.
+  const air=ctx.createBiquadFilter();
+  air.type="lowpass";
+  air.Q.value=0.9;
+  const body=ctx.createBiquadFilter();
+  body.type="bandpass";
+  body.Q.value=0.7;
+
+  const roarGain=ctx.createGain();
+  // Audible from the very first instant. A 15 ms swell only removes the click
+  // of an abrupt start; anything longer and the star is seen before it is
+  // heard. The filters likewise open at their near-field values.
+  roarGain.gain.setValueAtTime(0.0001,now);
+  roarGain.gain.linearRampToValueAtTime(0.70,now+0.015);
+  air.frequency.setValueAtTime(1250,now);   // no bright hiss: this is not a tyre
+  body.frequency.setValueAtTime(115,now);
+
+  // The star leaves the viewer and travels away toward the temple, so it is
+  // loudest and brightest at the start. Distance then takes the volume down
+  // and, before that, eats the high frequencies - air absorbs treble long
+  // before it absorbs bass, which is what makes something sound far off.
+  const ZFAR=2.6;                              // matches the visual depth
+  curve.forEach(({t,k})=>{
+    const dist=k*ZFAR;                         // 0 near the viewer, ZFAR at the temple
+    const near=1/(1+dist*dist*0.55);           // inverse-square falloff
+    roarGain.gain.linearRampToValueAtTime(Math.max(0.005,0.70*near),t);
+    air.frequency.linearRampToValueAtTime(190+1060*Math.pow(near,0.8),t);
+    body.frequency.linearRampToValueAtTime(48+70*near,t);
+  });
+  // it never quite dies: the impact is heard from a distance
+  roarGain.gain.linearRampToValueAtTime(0.05,tImpact);
+
+  // Slow uneven surges, as air is displaced in gusts rather than smoothly.
+  const buffet=ctx.createOscillator(); buffet.type="sine"; buffet.frequency.value=1.7;
+  const buffetAmt=ctx.createGain(); buffetAmt.gain.value=0.16;
+  buffet.connect(buffetAmt); buffetAmt.connect(roarGain.gain);
+  buffet.start(now); buffet.stop(tImpact+0.3);
+
+  const buffet2=ctx.createOscillator(); buffet2.type="sine"; buffet2.frequency.value=0.63;
+  const buffetAmt2=ctx.createGain(); buffetAmt2.gain.value=0.11;
+  buffet2.connect(buffetAmt2); buffetAmt2.connect(roarGain.gain);
+  buffet2.start(now); buffet2.stop(tImpact+0.3);
+
+  roar.connect(air); air.connect(body); body.connect(roarGain); roarGain.connect(master);
+  roar.start(now); roar.stop(tImpact+0.3);
+
+  // ---- doppler tone -------------------------------------------------------
+  // A falling body has a pitch that rises while it approaches. Without it the
+  // roar reads as wind rather than as something coming toward you.
+  // Sub-bass, felt more than heard. A pure sine well below the range where the
+  // ear picks out pitch, so it reads as mass rather than as a note.
+  const dop=ctx.createOscillator();
+  dop.type="sine";
+  const dopFilt=ctx.createBiquadFilter();
+  dopFilt.type="lowpass"; dopFilt.frequency.value=140; dopFilt.Q.value=0.7;
+  const dopGain=ctx.createGain();
+  dopGain.gain.setValueAtTime(0.34,now);
+  dop.frequency.setValueAtTime(29,now);
+  // Receding Doppler: the pitch drops as it pulls away.
+  // Barely moves: a big object's rumble does not glide up and down the scale.
+  curve.forEach(({t,k})=>{
+    const dist=k*ZFAR;
+    const near=1/(1+dist*dist*0.55);
+    dop.frequency.linearRampToValueAtTime(22+11*near,t);
+    dopGain.gain.linearRampToValueAtTime(Math.max(0.004,0.34*near),t);
+  });
+  dopGain.gain.linearRampToValueAtTime(0.03,tImpact);
+  dop.connect(dopFilt); dopFilt.connect(dopGain); dopGain.connect(master);
+  dop.start(now); dop.stop(tImpact+0.2);
+
+  // ---- impact -------------------------------------------------------------
+  // Two layers: an initial drop into the sub-bass, then a long ground tremor
+  // underneath it. A single short thud reads as a small object; what sells
+  // weight is how long the low end keeps ringing afterwards.
+  // A short bright transient. The ear judges impact almost entirely from the
+  // first few milliseconds, so this adds far more perceived force than pushing
+  // the sub-bass louder ever could - and it costs no headroom.
+  {
+    const cLen=Math.ceil(SR*0.09);
+    const cBuf=ctx.createBuffer(1,cLen,SR);
+    const cd=cBuf.getChannelData(0);
+    for(let i=0;i<cLen;i++){
+      cd[i]=(Math.random()*2-1)*Math.pow(1-i/cLen,7);
+    }
+    const crack=ctx.createBufferSource(); crack.buffer=cBuf;
+    const cHP=ctx.createBiquadFilter(); cHP.type="highpass"; cHP.frequency.value=900;
+    const cPk=ctx.createBiquadFilter(); cPk.type="peaking";
+    cPk.frequency.value=2600; cPk.Q.value=1.1; cPk.gain.value=8;
+    const cG=ctx.createGain(); cG.gain.value=0.55;
+    crack.connect(cHP); cHP.connect(cPk); cPk.connect(cG); cG.connect(master);
+    crack.start(tImpact);
+  }
+
+  // A held breath immediately before the strike. Silence makes what follows
+  // land far harder than any increase in level.
+  roarGain.gain.linearRampToValueAtTime(0.10,tImpact-0.07);
+  roarGain.gain.linearRampToValueAtTime(0.02,tImpact-0.012);
+
+  // The strike itself: a hard crack that drops straight into the sub-bass.
+  const boom=ctx.createOscillator();
+  boom.type="sine";
+  boom.frequency.setValueAtTime(190,tImpact);
+  boom.frequency.exponentialRampToValueAtTime(12,tImpact+3.2);
+  const boomGain=ctx.createGain();
+  boomGain.gain.setValueAtTime(0.0001,tImpact);
+  boomGain.gain.linearRampToValueAtTime(1.45,tImpact+0.005);
+  boomGain.gain.exponentialRampToValueAtTime(0.0001,tImpact+8.5);
+  boom.connect(boomGain); boomGain.connect(master);
+  boom.start(tImpact); boom.stop(tImpact+8.6);
+
+  // A second, slightly detuned layer thickens the blow without simply
+  // doubling the volume, which would only clip.
+  const boom2=ctx.createOscillator();
+  boom2.type="sine";
+  boom2.frequency.setValueAtTime(112,tImpact+0.02);
+  boom2.frequency.exponentialRampToValueAtTime(13,tImpact+1.9);
+  const boom2Gain=ctx.createGain();
+  boom2Gain.gain.setValueAtTime(0.0001,tImpact+0.02);
+  boom2Gain.gain.linearRampToValueAtTime(0.88,tImpact+0.030);
+  boom2Gain.gain.exponentialRampToValueAtTime(0.0001,tImpact+9.2);
+  boom2.connect(boom2Gain); boom2Gain.connect(master);
+  boom2.start(tImpact+0.02); boom2.stop(tImpact+9.3);
+
+  // Mid-range body. Small speakers reproduce almost nothing below 150 Hz, so
+  // an impact built only from sub-bass simply vanishes on a phone or tablet.
+  // This band is what carries the weight on those devices.
+  const mid=ctx.createOscillator();
+  mid.type="triangle";
+  mid.frequency.setValueAtTime(310,tImpact);
+  mid.frequency.exponentialRampToValueAtTime(72,tImpact+0.45);
+  const midG=ctx.createGain();
+  midG.gain.setValueAtTime(0.0001,tImpact);
+  midG.gain.linearRampToValueAtTime(0.50,tImpact+0.005);
+  midG.gain.exponentialRampToValueAtTime(0.0001,tImpact+1.5);
+  const midShape=ctx.createBiquadFilter();
+  midShape.type="lowpass"; midShape.frequency.value=1400; midShape.Q.value=0.9;
+  mid.connect(midShape); midShape.connect(midG); midG.connect(master);
+  mid.start(tImpact); mid.stop(tImpact+1.6);
+
+  // Ground tremor: what actually conveys tonnage is how long the low end
+  // keeps rolling once the strike itself has gone.
+  const tremor=ctx.createOscillator();
+  tremor.type="sine";
+  tremor.frequency.setValueAtTime(36,tImpact);
+  tremor.frequency.exponentialRampToValueAtTime(8,tImpact+10.5);
+  const tremorGain=ctx.createGain();
+  tremorGain.gain.setValueAtTime(0.0001,tImpact);
+  tremorGain.gain.linearRampToValueAtTime(1.20,tImpact+0.045);
+  tremorGain.gain.exponentialRampToValueAtTime(0.0001,tImpact+11.0);
+  const shudder=ctx.createOscillator(); shudder.type="sine"; shudder.frequency.value=4.2;
+  const shudderAmt=ctx.createGain(); shudderAmt.gain.value=0.24;
+  shudder.connect(shudderAmt); shudderAmt.connect(tremorGain.gain);
+  shudder.start(tImpact); shudder.stop(tImpact+11.0);
+  tremor.connect(tremorGain); tremorGain.connect(master);
+  tremor.start(tImpact); tremor.stop(tImpact+11.1);
+
+  // The blast rolling away and coming back off the temple walls.
+  // Echoes rolling out across the valley. Each returns later, lower, softer
+  // and duller than the last, so the blast recedes rather than simply stopping.
+  const echoTimes=[0.34,0.71,1.24,1.95,2.9,4.1,5.6,7.4];
+  echoTimes.forEach((dt,i)=>{
+    const e=ctx.createOscillator(); e.type="sine";
+    const f0=64*Math.pow(0.88,i);
+    e.frequency.setValueAtTime(f0,tImpact+dt);
+    e.frequency.exponentialRampToValueAtTime(Math.max(9,f0*0.34),tImpact+dt+1.4+i*0.3);
+    const eg=ctx.createGain();
+    const amp=0.52*Math.pow(0.68,i);
+    eg.gain.setValueAtTime(0.0001,tImpact+dt);
+    // distant echoes arrive softly rather than snapping in
+    eg.gain.linearRampToValueAtTime(amp,tImpact+dt+0.03+i*0.02);
+    eg.gain.exponentialRampToValueAtTime(0.0001,tImpact+dt+1.8+i*0.45);
+    // and progressively lose their edges
+    const eLP=ctx.createBiquadFilter();
+    eLP.type="lowpass"; eLP.frequency.value=Math.max(45,300*Math.pow(0.78,i));
+    e.connect(eLP); eLP.connect(eg); eg.connect(master);
+    e.start(tImpact+dt); e.stop(tImpact+dt+2.0+i*0.5);
+  });
+
+  // A last breath of air moving through the ruin, long after the sound has
+  // gone. It is what stops the silence arriving abruptly.
+  const settleLen=Math.ceil(SR*6);
+  const settleBuf=ctx.createBuffer(1,settleLen,SR);
+  {
+    const d=settleBuf.getChannelData(0);
+    let s0=0;
+    for(let i=0;i<settleLen;i++){
+      const w=Math.random()*2-1;
+      s0=(s0+0.02*w)/1.02;
+      d[i]=s0*2.6;
+    }
+  }
+  const settle=ctx.createBufferSource(); settle.buffer=settleBuf;
+  const settleLP=ctx.createBiquadFilter();
+  settleLP.type="lowpass";
+  settleLP.frequency.setValueAtTime(320,tImpact+1.0);
+  settleLP.frequency.exponentialRampToValueAtTime(70,tImpact+9.0);
+  const settleG=ctx.createGain();
+  settleG.gain.setValueAtTime(0.0001,tImpact+1.0);
+  settleG.gain.linearRampToValueAtTime(0.13,tImpact+1.8);
+  settleG.gain.exponentialRampToValueAtTime(0.0001,tImpact+10.5);
+  settle.connect(settleLP); settleLP.connect(settleG); settleG.connect(master);
+  settle.playbackRate.value=0.7;
+  settle.start(tImpact+1.0);
+
+  const crash=ctx.createBufferSource(); crash.buffer=impBuf;
+  const crashLP=ctx.createBiquadFilter();
+  crashLP.type="lowpass";
+  // Opens briefly on the strike, then closes as the dust settles.
+  crashLP.frequency.setValueAtTime(900,tImpact);
+  crashLP.frequency.exponentialRampToValueAtTime(60,tImpact+3.4);
+  const crashGain=ctx.createGain();
+  crashGain.gain.setValueAtTime(1.35,tImpact);
+  crashGain.gain.exponentialRampToValueAtTime(0.0001,tImpact+5.0);
+  crash.connect(crashLP); crashLP.connect(crashGain); crashGain.connect(master);
+  crash.playbackRate.value=0.55;          // stretched: bigger, slower rubble
+  crash.start(tImpact);
+
+  // ---- bells --------------------------------------------------------------
+  const tBells=tImpact+3.0;      // once the blast has rolled away
+  const scale=[1046.50,1174.66,1396.91,1567.98,2093.00,2349.32,2793.83];
+  [4,0,2,5,1,6,3,4].forEach((idx,n)=>{
+    const t=tBells+n*0.085+Math.random()*0.03;
+    const f=scale[idx];
+    const o=ctx.createOscillator(); o.type="sine"; o.frequency.value=f;
+    const g=ctx.createGain();
+    const peak=0.13*(1-n*0.06);   // heard from across the sanctuary
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(peak,t+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+1.6);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t+1.7);
+
+    const p=ctx.createOscillator(); p.type="sine"; p.frequency.value=f*2.76;
+    const pg=ctx.createGain();
+    pg.gain.setValueAtTime(0.0001,t);
+    pg.gain.exponentialRampToValueAtTime(peak*0.30,t+0.006);
+    pg.gain.exponentialRampToValueAtTime(0.0001,t+0.85);
+    p.connect(pg); pg.connect(master); p.start(t); p.stop(t+0.9);
+  });
+
+  const deep=ctx.createOscillator(); deep.type="sine"; deep.frequency.value=261.63;
+  const dg=ctx.createGain();
+  dg.gain.setValueAtTime(0.0001,tBells);
+  dg.gain.exponentialRampToValueAtTime(0.22,tBells+0.02);
+  dg.gain.exponentialRampToValueAtTime(0.0001,tBells+2.4);
+  deep.connect(dg); dg.connect(master);
+  deep.start(tBells); deep.stop(tBells+2.5);
+
+  const stop=()=>{
+    try{
+      master.gain.cancelScheduledValues(ctx.currentTime);
+      master.gain.setTargetAtTime(0,ctx.currentTime,0.05);
+      setTimeout(()=>ctx.close().catch(()=>{}),300);
+    }catch(e){}
+  };
+  setTimeout(stop,duration+14000);  // the tail runs well past the animation
+  stop.lead=LEAD;          // seconds the visuals should wait to stay in step
+  return stop;
+}
+
 function StarJourney({color,icon,from,onDone}){
   const canvasRef=React.useRef(null);
   const rafRef=React.useRef(null);
-  const DURATION=4400;
+  const DURATION=7000;
 
   React.useEffect(()=>{
     const canvas=canvasRef.current;
@@ -1219,8 +1620,8 @@ function StarJourney({color,icon,from,onDone}){
 
     // Anchors are screen positions; depth only scales the star.
     const P0={x:x0,     y:y0,            z:0};    // where it was tapped
-    const P1={x:(x0+W*0.5)/2, y:roofY-H*0.26, z:ZT*0.5};  // high over the sky
-    const P2={x:W*0.5,  y:roofY-H*0.02,  z:ZT};    // entering the roof
+    const P1={x:(x0+W*0.5)/2, y:Math.max(H*0.06, roofY-H*0.30), z:ZT*0.55};  // up at the cloud line
+    const P2={x:W*0.5,  y:Math.max(H*0.10, roofY-H*0.22),  z:ZT};    // lined up above the roof
     const P3={x:floorX, y:floorY,        z:ZT};    // the cella floor
 
     // Cubic Bezier through all four: the arc across the sky and the plunge
@@ -1240,7 +1641,25 @@ function StarJourney({color,icon,from,onDone}){
     // Eases out of the constellation, cruises, then commits to the drop.
     // Smooth, monotonic acceleration. The old blend of two curves produced a
     // slow patch mid-flight followed by a lurch; this keeps speed always rising.
-    const fall=(v)=>v*v*(3-2*v)*0.35 + Math.pow(v,2.2)*0.65;
+    // Climb and fall are different motions: rising loses speed as gravity
+    // bites, the apex is almost still, and the descent accelerates hard. One
+    // symmetric curve could not express that, which is why the arc felt flat.
+    const CLIMB=0.50, HANG=0.10;
+    const fall=(v)=>{
+      if(v<CLIMB){
+        const u=v/CLIMB;
+        return 0.40*(1-Math.pow(1-u,2.3));      // ascent, easing out
+      }
+      if(v<CLIMB+HANG){
+        const u=(v-CLIMB)/HANG;
+        return 0.40+0.03*u;                     // suspended at the top
+      }
+      // Clamped: at the junction the subtraction can land a hair below zero,
+      // and a negative base with a fractional exponent yields NaN - which
+      // showed up as a single dropped frame.
+      const u=Math.max(0,Math.min(1,(v-CLIMB-HANG)/(1-CLIMB-HANG)));
+      return 0.43+0.57*Math.pow(u,2.5);         // descent, accelerating
+    };
 
     // The same sun renderer the constellation uses, so it is visibly the
     // same object continuing its motion.
@@ -1307,9 +1726,14 @@ function StarJourney({color,icon,from,onDone}){
     };
 
 
-    const t0=performance.now();
+    // Fires once, alongside the animation, and is torn down with it.
+    const stopSound=playJourneySound(DURATION);
+
+    // Start on the same instant the audio was scheduled for, so the first
+    // frame and the first sample line up.
+    const t0=performance.now()+((stopSound&&stopSound.lead)||0)*1000;
     const frame=(now)=>{
-      const p=Math.min(1,(now-t0)/DURATION);
+      const p=Math.max(0,Math.min(1,(now-t0)/DURATION));
       const t=(now-t0)/1000;
 
       // 0.00-0.14  the star breaks free and hangs
@@ -1322,12 +1746,12 @@ function StarJourney({color,icon,from,onDone}){
       // 0.00-0.12 charge  0.12-0.60 flight  0.60-0.74 impact  0.74-1.00 stone
       // The phases now run right to the end: nothing is left holding a frozen
       // frame while the clock runs out.
-      const travel=fall(Math.min(1,Math.max(0,(p-0.10)/0.56)));
+      const travel=fall(Math.min(1,Math.max(0,(p-0.08)/0.72)));
       // Deliberately NOT clamped: past 1 the debris keeps flying and fading,
       // and the block below stops drawing entirely once it is spent. Clamping
       // is what left the explosion frozen on screen at the end.
-      const impact=Math.max(0,(p-0.64)/0.14);
-      const settle=Math.max(0,Math.min(1,(p-0.64)/0.22));
+      const impact=Math.max(0,(p-0.79)/0.13);
+      const settle=Math.max(0,Math.min(1,(p-0.85)/0.15));
 
       // charge-up: while still in place the star pulses and trembles
       const charge=Math.max(0,Math.min(1,p/0.14));
@@ -1402,6 +1826,40 @@ function StarJourney({color,icon,from,onDone}){
         }
       }
 
+      // Dust shaken loose from the entablature, drifting down through the
+      // sanctuary. Nothing says "the building moved" like debris falling
+      // afterwards.
+      if(impact>0&&impact<2.6){
+        const q=Math.exp(-impact*1.0);
+        for(let i=0;i<26;i++){
+          const seedX=((i*137.5)%100)/100;
+          const px=W*(0.16+seedX*0.68);
+          const delay=((i*37)%100)/100*0.5;
+          const age=Math.max(0,impact-delay);
+          if(age<=0) continue;
+          const py=roofY+age*age*260+((i*53)%40);
+          if(py>H) continue;
+          const drift=Math.sin(age*2.4+i)*9;
+          const a=Math.max(0,(1-age/2.2))*0.42*q;
+          if(a<0.01) continue;
+          ctx.beginPath();
+          ctx.arc(px+drift,py,1.1+((i*7)%3)*0.5,0,Math.PI*2);
+          ctx.fillStyle="rgba(214,206,182,"+a.toFixed(3)+")";
+          ctx.fill();
+        }
+      }
+
+      // Publish the shake so the temple can react. Written to a global rather
+      // than to state, because sixty rerenders a second would stutter.
+      try{
+        if(impact>0&&impact<3.2){
+          const decay=Math.exp(-impact*1.15);
+          window.__maestroQuake=decay;
+        }else{
+          window.__maestroQuake=0;
+        }
+      }catch(e){}
+
       // Dissolve the overlay over the last stretch: a hard cut at the end reads
       // as a freeze, a fade hands over to the temple cleanly.
       // Begins only once the stone has fully set, and runs to the very last
@@ -1412,7 +1870,7 @@ function StarJourney({color,icon,from,onDone}){
       else onDone&&onDone();
     };
     rafRef.current=requestAnimationFrame(frame);
-    return()=>cancelAnimationFrame(rafRef.current);
+    return()=>{cancelAnimationFrame(rafRef.current);stopSound&&stopSound();try{window.__maestroQuake=0;}catch(e){}};
   },[from,color,onDone]);
 
   return <canvas ref={canvasRef}
@@ -2243,6 +2701,9 @@ export default function Maestro(){
   },[apiKeys]);
   const [showKeys,setShowKeys]=useState(false);
   const [showLog,setShowLog]=useState(false);
+  const [fxOn,setFxOn]=useState(()=>{
+    try{return localStorage.getItem("maestro_fx")!=="off";}catch(e){return true;}
+  });
   const [journey,setJourney]=useState(null);
   // Stays true for as long as the temple screen is open, so the animation
   // properties below never change value mid-flight and retrigger themselves.
@@ -2703,7 +3164,22 @@ export default function Maestro(){
             </button>
 
             <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid rgba(0,180,255,0.12)"}}>
-              <p style={{fontFamily:"monospace",fontSize:12,color:"#00cfff",marginBottom:8}}>🔊 Voz de lectura</p>
+              <p style={{fontFamily:"monospace",fontSize:12,color:"#00cfff",marginBottom:8}}>🔊 Sonido</p>
+              <button onClick={()=>setFxOn(v=>{
+                  const n=!v;
+                  try{localStorage.setItem("maestro_fx",n?"on":"off");}catch(e){}
+                  return n;
+                })}
+                style={{width:"100%",padding:"9px",borderRadius:4,marginBottom:14,
+                        border:`1px solid ${fxOn?"rgba(0,180,255,0.3)":"rgba(255,255,255,0.12)"}`,
+                        background:fxOn?"rgba(0,180,255,0.10)":"transparent",
+                        color:fxOn?"#00cfff":"#667",fontFamily:"monospace",
+                        fontSize:11,cursor:"pointer",textAlign:"left",
+                        transition:"all .25s var(--ease-soft)"}}>
+                {fxOn?"🔔 Efectos de sonido activados":"🔕 Efectos de sonido silenciados"}
+              </button>
+
+              <p style={{fontFamily:"monospace",fontSize:12,color:"#00cfff",marginBottom:8}}>🗣 Voz de lectura</p>
               {voices.length===0?(
                 <p style={{fontSize:10,color:"#4a5a6a",fontFamily:"monospace",marginBottom:14,lineHeight:1.5}}>
                   Este dispositivo no ofrece voces en español. Puedes añadirlas
@@ -3056,7 +3532,7 @@ export default function Maestro(){
         {screen==="describe"&&(
           <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",
                        minHeight:"calc(100vh - 150px)",
-                       animation:enteredByStar?"templeRise 3.4s cubic-bezier(.16,.85,.28,1) both":"fadeIn 0.35s ease"}}>
+                       animation:enteredByStar?"templeRise 5.4s cubic-bezier(.16,.85,.28,1) both":"fadeIn 0.35s ease"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
               <div style={{width:46,height:46,filter:`drop-shadow(0 0 10px ${accentColor})`}}>
                 {selectedCategory&&ICONS[selectedCategory.id]&&<CyberIcon d={ICONS[selectedCategory.id].d} d2={ICONS[selectedCategory.id].d2} color={accentColor} size={32} gradId={`desc_${selectedCategory.id}`}/>}
@@ -3066,7 +3542,7 @@ export default function Maestro(){
                 <h2 style={{fontSize:18,margin:"2px 0 0",fontWeight:"bold",fontFamily:"monospace"}}>Describe tu problema</h2>
               </div>
             </div>
-            <ColumnFrame color={accentColor} altarDelay={enteredByStar?3960:0}>
+            <ColumnFrame color={accentColor} altarDelay={enteredByStar?6100:0}>
             <div style={{background:"transparent",border:"none",borderRadius:0,padding:0,display:"flex",flexDirection:"column",gap:6,height:"100%"}}>
               <div style={{position:"relative"}}>
                 <textarea style={{width:"100%",background:"transparent",border:"none",outline:"none",color:"#e8e2d2",fontSize:14,padding:"4px 6px",fontFamily:"Georgia,serif",resize:"none",boxSizing:"border-box",lineHeight:1.45,height:"100%",overflowY:"auto",textShadow:`0 0 10px ${accentColor}66, 0 1px 0 rgba(0,0,0,.8)`}} placeholder="Describe el problema... o pulsa 🎤" value={problem} onChange={e=>setProblem(e.target.value)} rows={2}/>
