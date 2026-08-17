@@ -1584,6 +1584,138 @@ function playJourneySound(duration){
   return stop;
 }
 
+
+// ---------------------------------------------------------------------------
+// Manual view control for the 3D scenes. Touch users can flick the sphere, but
+// on a monitor, a TV or a projector there is no gesture at all - so the same
+// state is driven by dragging, the arrow keys and on-screen buttons.
+// ---------------------------------------------------------------------------
+function useViewControl(){
+  const ref=React.useRef({yaw:0,pitch:0,spin:true});
+  const [ui,setUi]=React.useState({spin:true});
+
+  const nudge=React.useCallback((dYaw,dPitch)=>{
+    const v=ref.current;
+    v.yaw+=dYaw;
+    // Clamped so the sphere never flips past the poles, which is disorienting.
+    v.pitch=Math.max(-0.85,Math.min(0.85,v.pitch+dPitch));
+  },[]);
+
+  const toggleSpin=React.useCallback(()=>{
+    ref.current.spin=!ref.current.spin;
+    setUi({spin:ref.current.spin});
+  },[]);
+
+  const reset=React.useCallback(()=>{
+    ref.current.yaw=0; ref.current.pitch=0; ref.current.spin=true;
+    setUi({spin:true});
+  },[]);
+
+  // Dragging with a mouse, and the arrow keys for remotes and keyboards.
+  const attach=React.useCallback((el)=>{
+    if(!el) return;
+    let dragging=false,lastX=0,lastY=0,moved=0;
+
+    const down=(e)=>{
+      if(e.pointerType==="touch") return;      // touch already has its own feel
+      dragging=true; moved=0;
+      lastX=e.clientX; lastY=e.clientY;
+      el.setPointerCapture&&el.setPointerCapture(e.pointerId);
+      el.style.cursor="grabbing";
+    };
+    const move=(e)=>{
+      if(!dragging) return;
+      const dx=e.clientX-lastX, dy=e.clientY-lastY;
+      lastX=e.clientX; lastY=e.clientY;
+      moved+=Math.abs(dx)+Math.abs(dy);
+      nudge(dx*0.006,-dy*0.005);
+    };
+    const up=(e)=>{
+      if(!dragging) return;
+      dragging=false;
+      el.style.cursor="grab";
+      // A drag should not also register as a tap on whatever is underneath.
+      if(moved>6){ e.preventDefault(); e.stopPropagation(); }
+    };
+    const wheel=(e)=>{
+      if(!e.shiftKey) return;                 // plain scroll still scrolls
+      e.preventDefault();
+      nudge(e.deltaY*0.002,0);
+    };
+    const key=(e)=>{
+      const step=0.12;
+      if(e.key==="ArrowLeft"){nudge(-step,0);e.preventDefault();}
+      else if(e.key==="ArrowRight"){nudge(step,0);e.preventDefault();}
+      else if(e.key==="ArrowUp"){nudge(0,step);e.preventDefault();}
+      else if(e.key==="ArrowDown"){nudge(0,-step);e.preventDefault();}
+      else if(e.key===" "){toggleSpin();e.preventDefault();}
+    };
+
+    el.style.cursor="grab";
+    el.addEventListener("pointerdown",down);
+    el.addEventListener("pointermove",move);
+    el.addEventListener("pointerup",up);
+    el.addEventListener("pointercancel",up);
+    el.addEventListener("wheel",wheel,{passive:false});
+    window.addEventListener("keydown",key);
+    return()=>{
+      el.removeEventListener("pointerdown",down);
+      el.removeEventListener("pointermove",move);
+      el.removeEventListener("pointerup",up);
+      el.removeEventListener("pointercancel",up);
+      el.removeEventListener("wheel",wheel);
+      window.removeEventListener("keydown",key);
+    };
+  },[nudge,toggleSpin]);
+
+  return {ref,ui,nudge,toggleSpin,reset,attach};
+}
+
+// The on-screen pad. Only worth showing where there is no touchscreen.
+function ViewPad({onNudge,onToggle,onReset,spinning,color="#00cfff"}){
+  const hasTouch=typeof window!=="undefined"&&
+    (("ontouchstart" in window)||navigator.maxTouchPoints>0);
+  if(hasTouch) return null;
+
+  const btn={
+    width:30,height:30,borderRadius:6,cursor:"pointer",
+    border:"1px solid "+color+"44",background:"rgba(0,8,20,0.75)",
+    color:color,fontFamily:"monospace",fontSize:13,lineHeight:1,
+    display:"flex",alignItems:"center",justifyContent:"center",
+    transition:"all .2s var(--ease-soft)",
+  };
+  const hold=(fn)=>({
+    onPointerDown:(e)=>{
+      e.preventDefault(); fn();
+      const id=setInterval(fn,90);            // repeats while held down
+      const stop=()=>{clearInterval(id);window.removeEventListener("pointerup",stop);};
+      window.addEventListener("pointerup",stop);
+    },
+  });
+
+  return(
+    <div style={{position:"absolute",right:14,bottom:14,zIndex:6,
+                 display:"flex",flexDirection:"column",alignItems:"center",gap:4,
+                 background:"rgba(0,5,14,0.55)",padding:8,borderRadius:10,
+                 backdropFilter:"blur(6px)",border:"1px solid "+color+"22"}}>
+      <button style={btn} title="Girar arriba" {...hold(()=>onNudge(0,0.09))}>▲</button>
+      <div style={{display:"flex",gap:4}}>
+        <button style={btn} title="Girar izquierda" {...hold(()=>onNudge(-0.09,0))}>◀</button>
+        <button style={{...btn,background:spinning?color+"22":"rgba(0,8,20,0.75)"}}
+          title={spinning?"Detener rotación":"Reanudar rotación"}
+          onClick={onToggle}>{spinning?"❚❚":"▶"}</button>
+        <button style={btn} title="Girar derecha" {...hold(()=>onNudge(0.09,0))}>▶</button>
+      </div>
+      <button style={btn} title="Girar abajo" {...hold(()=>onNudge(0,-0.09))}>▼</button>
+      <button style={{...btn,width:"100%",height:22,fontSize:9.5,marginTop:2}}
+        title="Volver a la vista inicial" onClick={onReset}>CENTRAR</button>
+      <span style={{fontFamily:"monospace",fontSize:8,color:color+"77",marginTop:2}}>
+        arrastra o ←↑↓→
+      </span>
+    </div>
+  );
+}
+
 function StarJourney({color,icon,from,onDone}){
   const canvasRef=React.useRef(null);
   const rafRef=React.useRef(null);
@@ -1879,6 +2011,8 @@ function StarJourney({color,icon,from,onDone}){
 }
 
 function StarField({section,color,icon,label,onBack,onSelect}){
+  const view=useViewControl();
+  const viewRef=view.ref;
   const canvasRef=React.useRef(null);
   const stateRef=React.useRef(null);
   const rafRef=React.useRef(null);
@@ -2064,9 +2198,10 @@ function StarField({section,color,icon,label,onBack,onSelect}){
       const S=stateRef.current;
       const R=Math.min(W,H)*0.40;
       const FOV=3.0;
-      const rotY=t*0.64;
-      const tiltX=0.40;
-      const wob=Math.sin(t*0.8)*0.16;
+      const view=viewRef.current;
+      const rotY=t*0.64*(view.spin?1:0)+view.yaw;
+      const tiltX=0.40+view.pitch;
+      const wob=view.spin?Math.sin(t*0.8)*0.16:0;
 
       S.stars.forEach(s=>{
         const cY=Math.cos(rotY),sY=Math.sin(rotY);
@@ -2142,7 +2277,8 @@ function StarField({section,color,icon,label,onBack,onSelect}){
     canvas.addEventListener("touchmove",onMove,{passive:true});
     canvas.addEventListener("click",onTap);
     canvas.addEventListener("touchend",onTap);
-    return()=>{cancelAnimationFrame(rafRef.current);window.removeEventListener("resize",resize);};
+    const detachView=view.attach(canvas);
+    return()=>{cancelAnimationFrame(rafRef.current);window.removeEventListener("resize",resize);detachView&&detachView();};
   },[section,color,icon]);
 
   return(
@@ -2153,11 +2289,15 @@ function StarField({section,color,icon,label,onBack,onSelect}){
         <span style={{fontFamily:"monospace",fontSize:10,color:"#444",marginLeft:"auto"}}>// TOCA UNA ESTRELLA</span>
       </div>
       <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 28px)",cursor:"pointer",touchAction:"none",display:"block"}}/>
+      <ViewPad onNudge={view.nudge} onToggle={view.toggleSpin} onReset={view.reset}
+               spinning={view.ui.spin} color={color}/>
     </div>
   );
 }
 
 function OrbitalHome({onSelect}){
+  const view=useViewControl();
+  const viewRef=view.ref;
   const canvasRef=React.useRef(null);
   const stateRef=React.useRef(null);
   const rafRef=React.useRef(null);
@@ -2348,9 +2488,13 @@ function OrbitalHome({onSelect}){
       const S=stateRef.current;
       const R=Math.min(W,H)*0.40;      // sphere radius in px
       const FOV=3.0;                    // perspective strength
-      const rotY=t*0.56;                // horizontal rotation
-      const tiltX=0.42;                 // fixed tilt for a nicer view
-      const wob=Math.sin(t*0.70)*0.14;  // gentle wobble
+      // Automatic drift plus whatever the user has dialled in. On a phone the
+      // sphere can be flicked directly, but with a mouse, a remote or a
+      // trackpad there was no way to look around at all.
+      const view=viewRef.current;
+      const rotY=t*0.56*(view.spin?1:0)+view.yaw;
+      const tiltX=0.42+view.pitch;
+      const wob=view.spin?Math.sin(t*0.70)*0.14:0;
 
       S.orbs.forEach(o=>{
         // Rotate base point around Y axis
@@ -2406,9 +2550,10 @@ function OrbitalHome({onSelect}){
     canvas.addEventListener("touchmove",onMove,{passive:true});
     canvas.addEventListener("click",onTap);
     canvas.addEventListener("touchend",onTap);
+    const detachView=view.attach(canvas);
     return()=>{
       cancelAnimationFrame(rafRef.current);
-      window.removeEventListener("resize",resize);
+      window.removeEventListener("resize",resize);detachView&&detachView();
       canvas.removeEventListener("mousemove",onMove);
       canvas.removeEventListener("touchmove",onMove);
       canvas.removeEventListener("click",onTap);
@@ -2426,6 +2571,8 @@ function OrbitalHome({onSelect}){
     <div style={{position:"relative",width:"100%",height:"calc(100vh - 70px)"}}>
       <p style={{fontFamily:"monospace",fontSize:10,color:"#444",letterSpacing:"0.15em",textAlign:"center",paddingTop:6}}>// TOCA UNA ESFERA PARA EXPLORAR</p>
       <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 24px)",cursor:"pointer",touchAction:"none",display:"block"}}/>
+      <ViewPad onNudge={view.nudge} onToggle={view.toggleSpin} onReset={view.reset}
+               spinning={view.ui.spin}/>
     </div>
   );
 }
