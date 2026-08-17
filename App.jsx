@@ -2249,9 +2249,26 @@ function StarField({section,color,icon,label,onBack,onSelect}){
     };
     rafRef.current=requestAnimationFrame(loop);
 
+    const touchStart={current:null};
+    const onTouchStart=(e)=>{
+      const t=e.touches&&e.touches[0];
+      if(t) touchStart.current={x:t.clientX,y:t.clientY,at:Date.now()};
+    };
+    canvas.addEventListener("touchstart",onTouchStart,{passive:true});
+
     const pos=(e)=>{const rc=canvas.getBoundingClientRect();const tc=e.touches?.[0];return tc?[tc.clientX-rc.left,tc.clientY-rc.top]:[e.clientX-rc.left,e.clientY-rc.top];};
     const onMove=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.stars.forEach(s=>{s.hovered=false;const dx=mx-s.x,dy=my-s.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<s.size*1.6&&s.z>-0.3&&d<bd){bd=d;best=s;}});if(best)best.hovered=true;};
     const onTap=(e)=>{
+      // Ignore taps that were really scroll gestures.
+      if(e.changedTouches&&e.changedTouches[0]){
+        const t0=touchStart.current;
+        if(t0){
+          const dx=e.changedTouches[0].clientX-t0.x;
+          const dy=e.changedTouches[0].clientY-t0.y;
+          if(Math.hypot(dx,dy)>14) return;
+          if(Date.now()-t0.at>700) return;      // a long press is not a tap
+        }
+      }
       const[mx,my]=pos(e);
       let best=null,bd=1e9;
       stateRef.current.stars.forEach(s=>{const dx=mx-s.x,dy=my-s.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<s.size*1.8&&s.z>-0.3&&d<bd){bd=d;best=s;}});
@@ -2274,7 +2291,6 @@ function StarField({section,color,icon,label,onBack,onSelect}){
     const resize=()=>{const d=pixelRatio();W=canvas.offsetWidth;H=canvas.offsetHeight;canvas.width=W*d;canvas.height=H*d;ctx.setTransform(1,0,0,1,0,0);ctx.scale(d,d);};
     window.addEventListener("resize",resize);
     canvas.addEventListener("mousemove",onMove);
-    canvas.addEventListener("touchmove",onMove,{passive:true});
     canvas.addEventListener("click",onTap);
     canvas.addEventListener("touchend",onTap);
     const detachView=view.attach(canvas);
@@ -2282,13 +2298,13 @@ function StarField({section,color,icon,label,onBack,onSelect}){
   },[section,color,icon]);
 
   return(
-    <div style={{position:"relative",width:"100%",height:"calc(100vh - 70px)",animation:"fadeIn .45s var(--ease-out) both"}}>
+    <div style={{position:"relative",width:"100%",height:"calc(100vh - 150px)",minHeight:340,animation:"fadeIn .45s var(--ease-out) both"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"4px 4px 0"}}>
         <button onClick={onBack} style={{background:"rgba(0,8,20,0.8)",border:"1px solid "+color+"44",color:color,padding:"5px 12px",borderRadius:4,cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>← VOLVER</button>
         <span style={{fontFamily:"monospace",fontSize:12,color:color,textShadow:"0 0 8px "+color,letterSpacing:"0.1em"}}>{icon} {label}</span>
         <span style={{fontFamily:"monospace",fontSize:10,color:"#444",marginLeft:"auto"}}>// TOCA UNA ESTRELLA</span>
       </div>
-      <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 28px)",cursor:"pointer",touchAction:"none",display:"block"}}/>
+      <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 28px)",cursor:"pointer",touchAction:"pan-y",display:"block"}}/>
       <ViewPad onNudge={view.nudge} onToggle={view.toggleSpin} onReset={view.reset}
                spinning={view.ui.spin} color={color}/>
     </div>
@@ -2535,9 +2551,35 @@ function OrbitalHome({onSelect}){
     };
     rafRef.current=requestAnimationFrame(loop);
 
+    const touchStart={current:null};
+    const onTouchStart=(e)=>{
+      const t=e.touches&&e.touches[0];
+      if(t) touchStart.current={x:t.clientX,y:t.clientY,at:Date.now()};
+    };
+    canvas.addEventListener("touchstart",onTouchStart,{passive:true});
+
     const pos=(e)=>{const r=canvas.getBoundingClientRect();const tc=e.touches?.[0];return tc?[tc.clientX-r.left,tc.clientY-r.top]:[e.clientX-r.left,e.clientY-r.top];};
     const onMove=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.orbs.forEach(o=>{o.hovered=false;const dx=mx-o.x,dy=my-o.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<o.size*1.5&&o.z>-0.3&&d<bd){bd=d;best=o;}});if(best)best.hovered=true;};
-    const onTap=(e)=>{const[mx,my]=pos(e);let best=null,bd=1e9;stateRef.current.orbs.forEach(o=>{const dx=mx-o.x,dy=my-o.y;const d=Math.sqrt(dx*dx+dy*dy);if(d<o.size*1.7&&o.z>-0.3&&d<bd){bd=d;best=o;}});if(best){setSelected(best);setSubSpheres(best.section);}};
+    const onTap=(e)=>{
+      // A swipe that ends on an orb should scroll, not open it.
+      if(e.changedTouches&&e.changedTouches[0]){
+        const t0=touchStart.current;
+        if(t0){
+          const dx=e.changedTouches[0].clientX-t0.x;
+          const dy=e.changedTouches[0].clientY-t0.y;
+          if(Math.hypot(dx,dy)>14) return;
+          if(Date.now()-t0.at>700) return;
+        }
+      }
+      const[mx,my]=pos(e);
+      let best=null,bd=1e9;
+      stateRef.current.orbs.forEach(o=>{
+        const dx=mx-o.x,dy=my-o.y;
+        const d=Math.sqrt(dx*dx+dy*dy);
+        if(d<o.size*1.7&&o.z>-0.3&&d<bd){bd=d;best=o;}
+      });
+      if(best){setSelected(best);setSubSpheres(best.section);}
+    };
     const resize=()=>{
       const d=pixelRatio();
       W=canvas.offsetWidth; H=canvas.offsetHeight;
@@ -2547,7 +2589,6 @@ function OrbitalHome({onSelect}){
     };
     window.addEventListener("resize",resize);
     canvas.addEventListener("mousemove",onMove);
-    canvas.addEventListener("touchmove",onMove,{passive:true});
     canvas.addEventListener("click",onTap);
     canvas.addEventListener("touchend",onTap);
     const detachView=view.attach(canvas);
@@ -2568,9 +2609,9 @@ function OrbitalHome({onSelect}){
   );
 
   return(
-    <div style={{position:"relative",width:"100%",height:"calc(100vh - 70px)"}}>
+    <div style={{position:"relative",width:"100%",height:"calc(100vh - 150px)",minHeight:340}}>
       <p style={{fontFamily:"monospace",fontSize:10,color:"#444",letterSpacing:"0.15em",textAlign:"center",paddingTop:6}}>// TOCA UNA ESFERA PARA EXPLORAR</p>
-      <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 24px)",cursor:"pointer",touchAction:"none",display:"block"}}/>
+      <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 24px)",cursor:"pointer",touchAction:"pan-y",display:"block"}}/>
       <ViewPad onNudge={view.nudge} onToggle={view.toggleSpin} onReset={view.reset}
                spinning={view.ui.spin}/>
     </div>
