@@ -2964,7 +2964,7 @@ export default function Maestro(){
         const data=await res.json();
         raw=data.content.map(b=>b.text||"").join("").trim();
       } else {
-        if(!apiKeys.gemini){setGuide({error:true,msg:"⚠️ Añade tu API Key de Gemini pulsando ⚙️. Es gratis en aistudio.google.com"});return;}
+        if(!apiKeys.gemini){setGuide({error:true,msg:"Necesitas una clave gratuita de Gemini para generar guías.",needsKey:true});return;}
         // Model names change over time; try current ones in order until one works.
         // Google retires models often, so a fixed list goes stale within months.
         // These are the current ones; if every single one is rejected as
@@ -3147,12 +3147,79 @@ export default function Maestro(){
             <div style={{marginBottom:16}}>
               <label style={{fontFamily:"monospace",fontSize:12,color:"#c77dff",display:"block",marginBottom:6}}>⚡ Claude API Key</label>
               <input type="password" placeholder="sk-ant-..." value={apiKeys.claude} onChange={e=>setApiKeys(k=>({...k,claude:e.target.value}))} style={{width:"100%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(199,125,255,0.3)",borderRadius:4,color:"#eee",padding:"10px 14px",fontFamily:"monospace",fontSize:13,boxSizing:"border-box"}}/>
-              <p style={{fontSize:11,color:"#555",marginTop:4,fontFamily:"monospace"}}>console.anthropic.com</p>
+              <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer"
+                style={{display:"inline-block",fontSize:10,color:"#8a6aa8",marginTop:5,
+                        fontFamily:"monospace",textDecoration:"underline"}}>
+                ↗ Obtener clave en console.anthropic.com (de pago)
+              </a>
             </div>
             <div style={{marginBottom:20}}>
               <label style={{fontFamily:"monospace",fontSize:12,color:"#6ba3f5",display:"block",marginBottom:6}}>✦ Gemini API Key — Gratis</label>
-              <input type="password" placeholder="AIza..." value={apiKeys.gemini} onChange={e=>setApiKeys(k=>({...k,gemini:e.target.value}))} style={{width:"100%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(66,133,244,0.3)",borderRadius:4,color:"#eee",padding:"10px 14px",fontFamily:"monospace",fontSize:13,boxSizing:"border-box"}}/>
-              <p style={{fontSize:11,color:"#555",marginTop:4,fontFamily:"monospace"}}>aistudio.google.com (gratis)</p>
+              <div style={{position:"relative"}}>
+                <input type="password" placeholder="AIza..." value={apiKeys.gemini}
+                  onChange={e=>setApiKeys(k=>({...k,gemini:e.target.value.trim()}))}
+                  style={{width:"100%",background:"rgba(0,0,0,0.5)",border:`1px solid ${
+                    apiKeys.gemini?(/^AIza[\w-]{30,}$/.test(apiKeys.gemini)?"rgba(87,204,153,0.5)":"rgba(244,162,97,0.5)"):"rgba(66,133,244,0.3)"
+                  }`,borderRadius:4,color:"#eee",padding:"10px 74px 10px 14px",fontFamily:"monospace",fontSize:13,boxSizing:"border-box"}}/>
+                {/* Pasting is the step people fumble, so it gets its own button. */}
+                <button
+                  onClick={async()=>{
+                    try{
+                      const txt=(await navigator.clipboard.readText()||"").trim();
+                      if(txt) setApiKeys(k=>({...k,gemini:txt}));
+                      else alert("No hay nada copiado.");
+                    }catch(e){
+                      alert("Tu navegador no permite pegar automáticamente. Mantén pulsado el campo y elige Pegar.");
+                    }
+                  }}
+                  style={{position:"absolute",top:"50%",right:7,transform:"translateY(-50%)",
+                          padding:"5px 10px",borderRadius:4,border:"1px solid rgba(66,133,244,0.35)",
+                          background:"rgba(66,133,244,0.14)",color:"#6ba3f5",
+                          fontFamily:"monospace",fontSize:10,cursor:"pointer"}}>
+                  📋 Pegar
+                </button>
+              </div>
+
+              {apiKeys.gemini&&(
+                <p style={{fontSize:10,marginTop:5,fontFamily:"monospace",
+                           color:/^AIza[\w-]{30,}$/.test(apiKeys.gemini)?"#57cc99":"#f4a261"}}>
+                  {/^AIza[\w-]{30,}$/.test(apiKeys.gemini)
+                    ? "✓ La clave tiene el formato correcto"
+                    : "⚠ No parece una clave de Gemini (empiezan por AIza)"}
+                </p>
+              )}
+
+              {!apiKeys.gemini&&(
+                <div style={{marginTop:9,background:"rgba(66,133,244,0.07)",
+                             border:"1px solid rgba(66,133,244,0.2)",borderRadius:6,padding:"11px 12px"}}>
+                  <p style={{fontFamily:"monospace",fontSize:11,color:"#9ab",margin:"0 0 8px",lineHeight:1.6}}>
+                    Necesitas una clave gratuita de Google. Se tarda un minuto:
+                  </p>
+                  <ol style={{margin:"0 0 10px",paddingLeft:17,color:"#7a8a9a",
+                              fontFamily:"monospace",fontSize:10.5,lineHeight:1.75}}>
+                    <li>Abre Google AI Studio con el botón de abajo</li>
+                    <li>Entra con tu cuenta de Google</li>
+                    <li>Pulsa <b style={{color:"#9ab"}}>Get API key</b> → <b style={{color:"#9ab"}}>Create API key</b></li>
+                    <li>Copia la clave y vuelve aquí</li>
+                    <li>Pulsa <b style={{color:"#9ab"}}>📋 Pegar</b></li>
+                  </ol>
+                  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+                    style={{display:"block",textAlign:"center",padding:"10px",borderRadius:4,
+                            background:"rgba(66,133,244,0.22)",border:"1px solid rgba(66,133,244,0.45)",
+                            color:"#8fc0ff",fontFamily:"monospace",fontSize:12,
+                            textDecoration:"none",fontWeight:"bold"}}>
+                    ↗ Abrir Google AI Studio
+                  </a>
+                </div>
+              )}
+
+              {apiKeys.gemini&&(
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+                  style={{display:"inline-block",marginTop:6,fontSize:10,color:"#5a7a95",
+                          fontFamily:"monospace",textDecoration:"underline"}}>
+                  ↗ Gestionar mis claves en Google AI Studio
+                </a>
+              )}
             </div>
             <button onClick={()=>setShowKeys(false)} style={{width:"100%",padding:"12px",border:"none",borderRadius:4,background:"rgba(0,180,255,0.15)",color:"#00cfff",fontFamily:"monospace",fontSize:14,cursor:"pointer",fontWeight:"bold"}}>✓ Guardar y cerrar</button>
             <p style={{fontSize:10,color:"#4a5a6a",marginTop:10,fontFamily:"monospace",textAlign:"center",lineHeight:1.5}}>
@@ -3688,6 +3755,15 @@ export default function Maestro(){
                 <p style={{fontSize:16,marginTop:12}}>No se pudo generar la guía.</p>
                 {guide.msg&&<p style={{fontSize:13,color:"#a05050",maxWidth:400,margin:"0 auto 8px"}}>{guide.msg}</p>}
                 {guide.raw&&<pre style={{fontSize:11,color:"#555",maxWidth:400,margin:"0 auto 16px",textAlign:"left",whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{guide.raw}</pre>}
+                {guide.needsKey&&(
+                  <button onClick={()=>{setShowKeys(true);}}
+                    style={{padding:"13px 26px",border:"none",borderRadius:4,
+                            background:"rgba(66,133,244,0.9)",color:"#fff",fontSize:14,
+                            fontWeight:"bold",cursor:"pointer",fontFamily:"monospace",
+                            marginBottom:14}}>
+                    🔑 CONFIGURAR MI CLAVE
+                  </button>
+                )}
                 <div style={{display:"flex",gap:9,justifyContent:"center",flexWrap:"wrap"}}>
                   {/* Retries with the text already written - the old flow sent the
                       user back to an empty form. */}
