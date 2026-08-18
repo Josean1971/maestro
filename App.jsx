@@ -12,6 +12,15 @@ import React, { useState } from "react";
 (function installCrashLogger(){
   if (typeof window === "undefined" || window.__maestroLogger) return;
   window.__maestroLogger = true;
+  // A rejected promise anywhere used to leave a button looking dead. Catching
+  // them centrally means a blocked API degrades instead of breaking the UI.
+  window.addEventListener("unhandledrejection",(e)=>{
+    const msg=String((e.reason&&e.reason.message)||e.reason||"");
+    if(/clipboard|permissions policy|NotAllowedError/i.test(msg)){
+      e.preventDefault();      // expected in embedded contexts: not a fault
+    }
+  });
+
   const write = (entry) => {
     try {
       const log = JSON.parse(localStorage.getItem("maestro_crashlog") || "[]");
@@ -76,6 +85,41 @@ function buildNarration(guide){
     bits.push("Cuándo llamar a un profesional. "+guide.cuando_llamar_profesional);
   }
   return bits.join(" ");
+}
+
+
+// The Clipboard API is blocked outright in some embedded and cross-origin
+// contexts, and the rejection used to abort whatever the button was doing.
+// This always succeeds: it copies when it can, falls back to the old
+// execCommand path, and otherwise hands the text back for display.
+async function copyText(txt){
+  try{
+    if(navigator.clipboard&&window.isSecureContext){
+      await navigator.clipboard.writeText(txt);
+      return true;
+    }
+  }catch(e){ /* blocked by policy - fall through */ }
+  try{
+    const ta=document.createElement("textarea");
+    ta.value=txt;
+    ta.setAttribute("readonly","");
+    ta.style.cssText="position:fixed;top:-1000px;opacity:0";
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0,txt.length);
+    const ok=document.execCommand("copy");
+    document.body.removeChild(ta);
+    if(ok) return true;
+  }catch(e){}
+  return false;
+}
+
+async function readText(){
+  try{
+    if(navigator.clipboard&&navigator.clipboard.readText&&window.isSecureContext){
+      return (await navigator.clipboard.readText()||"").trim();
+    }
+  }catch(e){}
+  return null;      // caller should ask the user to paste manually
 }
 
 function MatrixRain() {
@@ -784,6 +828,72 @@ function ColumnFrame({color,children,altarDelay=0}){
     return()=>cancelAnimationFrame(raf);
   },[]);
 
+  // Static drawing: it depends only on the accent colour and the reveal
+  // delay, so it is built once instead of on every animation frame.
+  const monolith=React.useMemo(()=>(
+    <>
+            {/* the monolith: a standing slab of carved stone */}
+            <svg viewBox="0 0 200 150" preserveAspectRatio="none"
+                 style={{position:"absolute",inset:0,width:"100%",height:"100%",
+                         display:"block",filter:"drop-shadow(0 10px 26px rgba(0,0,0,.75))",
+                         animation:`altarReveal .01s linear ${altarDelay}ms both`}}>
+              <defs>
+                <linearGradient id="monoFace" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   stopColor="#55524a"/>
+                  <stop offset="14%"  stopColor="#9a9587"/>
+                  <stop offset="38%"  stopColor="#cdc8b7"/>
+                  <stop offset="58%"  stopColor="#b0ab9c"/>
+                  <stop offset="82%"  stopColor="#7d7a6f"/>
+                  <stop offset="100%" stopColor="#4a4842"/>
+                </linearGradient>
+                <linearGradient id="monoSide" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   stopColor="#3d3b36"/>
+                  <stop offset="100%" stopColor="#615e56"/>
+                </linearGradient>
+                <linearGradient id="monoCap" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%"   stopColor="#e8e2d2"/>
+                  <stop offset="100%" stopColor="#a9a496"/>
+                </linearGradient>
+                <filter id="monoRough" x="-8%" y="-8%" width="116%" height="116%">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.6 0.85" numOctaves="5" seed="31" result="n"/>
+                  <feDisplacementMap in="SourceGraphic" in2="n" scale="2.1"
+                                     xChannelSelector="R" yChannelSelector="G"/>
+                </filter>
+              </defs>
+
+              <g filter="url(#monoRough)">
+                {/* the shaft: slightly tapered, wider at the base */}
+                <path d="M28,10 L172,10 L178,132 L22,132 Z" fill="url(#monoFace)"/>
+                {/* right edge catching less light, giving it thickness */}
+                <path d="M172,10 L184,16 L189,130 L178,132 Z" fill="url(#monoSide)"/>
+                {/* broken, uneven crown */}
+                <path d="M28,10 L46,5 L62,11 L84,3 L104,9 L126,4 L148,11 L172,6 L172,10 L28,10 Z"
+                      fill="url(#monoCap)"/>
+                {/* plinth */}
+                <path d="M14,132 L190,132 L194,142 L10,142 Z" fill="url(#monoCap)" opacity="0.9"/>
+                <path d="M10,142 L194,142 L198,150 L6,150 Z" fill="url(#monoFace)" opacity="0.85"/>
+              </g>
+
+              {/* the inscription panel, cut into the face */}
+              <rect x="40" y="26" width="120" height="94" fill="#080d14" opacity="0.62"/>
+              <path d="M40,120 L40,26 L160,26" fill="none" stroke="#4f4c45" strokeWidth="1.8" opacity="0.85"/>
+              <path d="M160,26 L162,120 L40,120" fill="none" stroke="#ded8c7" strokeWidth="1.2" opacity="0.4"/>
+              <rect x="40" y="26" width="120" height="94" fill={color} opacity="0.1"/>
+
+              {/* carved ornament above the panel */}
+              <circle cx="100" cy="19" r="4.5" fill="none" stroke="#8a867a" strokeWidth="1.2" opacity="0.75"/>
+              <path d="M93,19 L80,19 M107,19 L120,19" stroke="#8a867a" strokeWidth="1.1" opacity="0.6"/>
+
+              {/* age: chips, cracks, missing corners */}
+              <path d="M22,132 L34,126 L24,118 Z" fill="#050b14" opacity="0.5"/>
+              <path d="M178,60 L170,66 L179,73 Z" fill="#050b14" opacity="0.42"/>
+              <path d="M56,10 L60,32 L52,54 L58,78 L50,104" fill="none" stroke="#3e3c36" strokeWidth="0.9" opacity="0.45"/>
+              <path d="M150,120 L144,132 L152,142" fill="none" stroke="#3e3c36" strokeWidth="0.8" opacity="0.4"/>
+              <path d="M100,132 L98,142" stroke="#3e3c36" strokeWidth="0.7" opacity="0.3"/>
+            </svg>
+    </>
+  ),[color,altarDelay]);
+
   const Cloud=({x,y,s,op})=>(
     <g transform={`translate(${x},${y}) scale(${s})`} opacity={op}>
       <ellipse cx="0"   cy="0"  rx="22" ry="11"/>
@@ -900,8 +1010,10 @@ function ColumnFrame({color,children,altarDelay=0}){
           <defs>
             <linearGradient id="openSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%"   stopColor="#050b14" stopOpacity="0"/>
-              <stop offset="45%"  stopColor="#132a42" stopOpacity="0.35"/>
-              <stop offset="100%" stopColor="#20455f" stopOpacity="0.6"/>
+              <stop offset="22%"  stopColor="#0b1a2c" stopOpacity="0.18"/>
+              <stop offset="55%"  stopColor="#132a42" stopOpacity="0.38"/>
+              <stop offset="82%"  stopColor="#1b3b55" stopOpacity="0.52"/>
+              <stop offset="100%" stopColor="#20455f" stopOpacity="0.62"/>
             </linearGradient>
             <radialGradient id="skyCloud" cx="42%" cy="32%" r="72%">
               <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.95"/>
@@ -911,23 +1023,17 @@ function ColumnFrame({color,children,altarDelay=0}){
             <filter id="skyFar"><feGaussianBlur stdDeviation="3.2"/></filter>
             <filter id="skyNear"><feGaussianBlur stdDeviation="1.5"/></filter>
           </defs>
+          {/* Just the gradient: the only clouds that move are the ones passing
+              behind the roofline, which is where the eye is already looking. */}
           <rect x="0" y="0" width="400" height="110" fill="url(#openSky)"/>
-          <g fill="url(#skyCloud)" filter="url(#skyFar)">
-            {SKY_CLOUDS.map(([bx,by,s,sp,op],i)=>(
-              <Cloud key={"sb"+i} x={((bx+t*sp*1.6)%230)*640/230-120} y={by+Math.sin(t*0.28+i)*2.2} s={s*1.35} op={op*0.5}/>
-            ))}
-          </g>
-          <g fill="url(#skyCloud)" filter="url(#skyNear)">
-            {SKY_CLOUDS.map(([bx,by,s,sp,op],i)=>(
-              <Cloud key={"sf"+i} x={((bx+t*sp*2.6)%230)*640/230-120} y={by+Math.sin(t*0.36+i)*3} s={s} op={op}/>
-            ))}
-          </g>
+
         </svg>
       </div>
 
       {/* ---- the temple, in perspective, with the oracle inside ---- */}
       <div style={{position:"relative",width:"100%"}}>
         <svg viewBox="0 0 400 230" preserveAspectRatio="xMidYMax meet"
+             style={{overflow:"visible"}}
              style={{width:"100%",height:"auto",display:"block"}}>
           <defs>
             <linearGradient id="agedGrad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -955,13 +1061,6 @@ function ColumnFrame({color,children,altarDelay=0}){
               <stop offset="55%"  stopColor={color} stopOpacity="0.18"/>
               <stop offset="100%" stopColor={color} stopOpacity="0"/>
             </radialGradient>
-            <radialGradient id="templeCloud" cx="42%" cy="32%" r="72%">
-              <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.95"/>
-              <stop offset="55%"  stopColor="#eef4fb" stopOpacity="0.68"/>
-              <stop offset="100%" stopColor="#b9c6d8" stopOpacity="0.3"/>
-            </radialGradient>
-            <filter id="templeCloudSoft"><feGaussianBlur stdDeviation="2.4"/></filter>
-            <filter id="templeCloudSharp"><feGaussianBlur stdDeviation="1.1"/></filter>
             <radialGradient id="torchGlow" cx="50%" cy="55%" r="50%">
               <stop offset="0%"   stopColor="#ffb347" stopOpacity="0.5"/>
               <stop offset="45%"  stopColor="#ff7a1a" stopOpacity="0.18"/>
@@ -978,6 +1077,16 @@ function ColumnFrame({color,children,altarDelay=0}){
               <stop offset="50%"  stopColor="#fde047"/>
               <stop offset="100%" stopColor="#fffbeb"/>
             </linearGradient>
+            <radialGradient id="templeCloud" cx="42%" cy="32%" r="72%">
+              <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.95"/>
+              <stop offset="55%"  stopColor="#eef4fb" stopOpacity="0.68"/>
+              <stop offset="100%" stopColor="#b9c6d8" stopOpacity="0.3"/>
+            </radialGradient>
+            <clipPath id="skyClip">
+              <rect x="-140" y="-620" width="680" height="660"/>
+            </clipPath>
+            <filter id="templeCloudSoft"><feGaussianBlur stdDeviation="2.4"/></filter>
+            <filter id="templeCloudSharp"><feGaussianBlur stdDeviation="1.1"/></filter>
             <filter id="weathered" x="-20%" y="-20%" width="140%" height="140%">
               <feTurbulence type="fractalNoise" baseFrequency="0.9 0.35" numOctaves="4" seed="7" result="n"/>
               <feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/>
@@ -1101,65 +1210,7 @@ function ColumnFrame({color,children,altarDelay=0}){
                 the stone (viewBox 200x150, panel at x40-160, y26-120). */}
             <div style={{position:"absolute",inset:0}}>
 
-            {/* the monolith: a standing slab of carved stone */}
-            <svg viewBox="0 0 200 150" preserveAspectRatio="none"
-                 style={{position:"absolute",inset:0,width:"100%",height:"100%",
-                         display:"block",filter:"drop-shadow(0 10px 26px rgba(0,0,0,.75))",
-                         animation:`altarReveal .01s linear ${altarDelay}ms both`}}>
-              <defs>
-                <linearGradient id="monoFace" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%"   stopColor="#55524a"/>
-                  <stop offset="14%"  stopColor="#9a9587"/>
-                  <stop offset="38%"  stopColor="#cdc8b7"/>
-                  <stop offset="58%"  stopColor="#b0ab9c"/>
-                  <stop offset="82%"  stopColor="#7d7a6f"/>
-                  <stop offset="100%" stopColor="#4a4842"/>
-                </linearGradient>
-                <linearGradient id="monoSide" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%"   stopColor="#3d3b36"/>
-                  <stop offset="100%" stopColor="#615e56"/>
-                </linearGradient>
-                <linearGradient id="monoCap" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%"   stopColor="#e8e2d2"/>
-                  <stop offset="100%" stopColor="#a9a496"/>
-                </linearGradient>
-                <filter id="monoRough" x="-8%" y="-8%" width="116%" height="116%">
-                  <feTurbulence type="fractalNoise" baseFrequency="0.6 0.85" numOctaves="5" seed="31" result="n"/>
-                  <feDisplacementMap in="SourceGraphic" in2="n" scale="2.1"
-                                     xChannelSelector="R" yChannelSelector="G"/>
-                </filter>
-              </defs>
-
-              <g filter="url(#monoRough)">
-                {/* the shaft: slightly tapered, wider at the base */}
-                <path d="M28,10 L172,10 L178,132 L22,132 Z" fill="url(#monoFace)"/>
-                {/* right edge catching less light, giving it thickness */}
-                <path d="M172,10 L184,16 L189,130 L178,132 Z" fill="url(#monoSide)"/>
-                {/* broken, uneven crown */}
-                <path d="M28,10 L46,5 L62,11 L84,3 L104,9 L126,4 L148,11 L172,6 L172,10 L28,10 Z"
-                      fill="url(#monoCap)"/>
-                {/* plinth */}
-                <path d="M14,132 L190,132 L194,142 L10,142 Z" fill="url(#monoCap)" opacity="0.9"/>
-                <path d="M10,142 L194,142 L198,150 L6,150 Z" fill="url(#monoFace)" opacity="0.85"/>
-              </g>
-
-              {/* the inscription panel, cut into the face */}
-              <rect x="40" y="26" width="120" height="94" fill="#080d14" opacity="0.62"/>
-              <path d="M40,120 L40,26 L160,26" fill="none" stroke="#4f4c45" strokeWidth="1.8" opacity="0.85"/>
-              <path d="M160,26 L162,120 L40,120" fill="none" stroke="#ded8c7" strokeWidth="1.2" opacity="0.4"/>
-              <rect x="40" y="26" width="120" height="94" fill={color} opacity="0.1"/>
-
-              {/* carved ornament above the panel */}
-              <circle cx="100" cy="19" r="4.5" fill="none" stroke="#8a867a" strokeWidth="1.2" opacity="0.75"/>
-              <path d="M93,19 L80,19 M107,19 L120,19" stroke="#8a867a" strokeWidth="1.1" opacity="0.6"/>
-
-              {/* age: chips, cracks, missing corners */}
-              <path d="M22,132 L34,126 L24,118 Z" fill="#050b14" opacity="0.5"/>
-              <path d="M178,60 L170,66 L179,73 Z" fill="#050b14" opacity="0.42"/>
-              <path d="M56,10 L60,32 L52,54 L58,78 L50,104" fill="none" stroke="#3e3c36" strokeWidth="0.9" opacity="0.45"/>
-              <path d="M150,120 L144,132 L152,142" fill="none" stroke="#3e3c36" strokeWidth="0.8" opacity="0.4"/>
-              <path d="M100,132 L98,142" stroke="#3e3c36" strokeWidth="0.7" opacity="0.3"/>
-            </svg>
+            {monolith}
 
             {/* the writing itself, seated inside the carved recess */}
             <div style={{position:"absolute",
@@ -1219,7 +1270,11 @@ function playJourneySound(duration){
 
   let ctx;
   try{ ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return ()=>{}; }
-  if(ctx.state==="suspended") ctx.resume().catch(()=>{});
+  if(ctx.state==="suspended"){
+    // Fire and forget: if it cannot resume, the lead below still applies and
+    // the visuals simply run without sound rather than out of step with it.
+    ctx.resume().catch(()=>{});
+  }
 
   const D=duration/1000;
   const SR=ctx.sampleRate;
@@ -1283,6 +1338,8 @@ function playJourneySound(duration){
 
   // A small lead so both media start on the same future instant, plus whatever
   // the device needs to actually push audio out of the speaker.
+  // Generous enough to cover resuming the context and the first, always
+  // slower, animation frame.
   const LEAD=0.08+(ctx.baseLatency||0)+(ctx.outputLatency||0);
   const now=ctx.currentTime+LEAD;
 
@@ -1580,7 +1637,7 @@ function playJourneySound(duration){
     }catch(e){}
   };
   setTimeout(stop,duration+14000);  // the tail runs well past the animation
-  stop.lead=LEAD;          // seconds the visuals should wait to stay in step
+  stop.lead=LEAD;
   return stop;
 }
 
@@ -1861,9 +1918,8 @@ function StarJourney({color,icon,from,onDone}){
     // Fires once, alongside the animation, and is torn down with it.
     const stopSound=playJourneySound(DURATION);
 
-    // Start on the same instant the audio was scheduled for, so the first
-    // frame and the first sample line up.
     const t0=performance.now()+((stopSound&&stopSound.lead)||0)*1000;
+
     const frame=(now)=>{
       const p=Math.max(0,Math.min(1,(now-t0)/DURATION));
       const t=(now-t0)/1000;
@@ -3328,10 +3384,32 @@ export default function Maestro(){
         </div>
       </header>
 
+      {/* zIndex sits above the journey canvas, which otherwise covered this
+          panel. Only one scrolling container: nesting two of them made touch
+          gestures unpredictable on mobile. */}
       {showKeys&&(
-        <div style={{position:"fixed",inset:0,zIndex:50,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowKeys(false)}>
-          <div style={{background:"#050d18",border:"1px solid rgba(0,180,255,0.3)",borderRadius:8,padding:28,width:"100%",maxWidth:440}} onClick={e=>e.stopPropagation()}>
-            <h3 style={{fontFamily:"monospace",color:"#00cfff",marginBottom:20,fontSize:16}}>⚙️ API Keys</h3>
+        <div style={{position:"fixed",inset:0,zIndex:300,background:"rgba(0,0,0,0.78)",
+                     display:"block",overflowY:"auto",WebkitOverflowScrolling:"touch",
+                     padding:"14px"}}
+             onClick={()=>setShowKeys(false)}>
+          <div style={{background:"#050d18",border:"1px solid rgba(0,180,255,0.3)",
+                       borderRadius:8,width:"100%",maxWidth:440,
+                       margin:"0 auto",position:"relative"}}
+               onClick={e=>e.stopPropagation()}>
+            {/* Header stays put while the settings themselves scroll. */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                         padding:"16px 22px 12px",borderBottom:"1px solid rgba(0,180,255,0.12)",
+                         position:"sticky",top:0,background:"#050d18",zIndex:2,
+                         borderRadius:"8px 8px 0 0"}}>
+              <h3 style={{fontFamily:"monospace",color:"#00cfff",fontSize:16,margin:0}}>⚙️ Ajustes</h3>
+              <button onClick={()=>setShowKeys(false)}
+                style={{background:"none",border:"none",color:"#667",fontSize:20,
+                        cursor:"pointer",lineHeight:1,padding:"0 4px"}}>✕</button>
+            </div>
+            <div style={{padding:"18px 22px 22px"}}>
+            <p style={{fontFamily:"monospace",fontSize:11,color:"#00cfff",
+                       letterSpacing:"0.1em",marginBottom:10}}>🔑 CLAVES DE IA</p>
+
             <div style={{marginBottom:16}}>
               <label style={{fontFamily:"monospace",fontSize:12,color:"#c77dff",display:"block",marginBottom:6}}>⚡ Claude API Key</label>
               <input type="password" placeholder="sk-ant-..." value={apiKeys.claude} onChange={e=>setApiKeys(k=>({...k,claude:e.target.value}))} style={{width:"100%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(199,125,255,0.3)",borderRadius:4,color:"#eee",padding:"10px 14px",fontFamily:"monospace",fontSize:13,boxSizing:"border-box"}}/>
@@ -3353,11 +3431,11 @@ export default function Maestro(){
                 <button
                   onClick={async()=>{
                     try{
-                      const txt=(await navigator.clipboard.readText()||"").trim();
+                      const txt=await readText();
                       if(txt) setApiKeys(k=>({...k,gemini:txt}));
-                      else alert("No hay nada copiado.");
+                      else alert("Tu navegador no permite pegar automáticamente aquí.\n\nMantén pulsado el campo de texto y elige Pegar.");
                     }catch(e){
-                      alert("Tu navegador no permite pegar automáticamente. Mantén pulsado el campo y elige Pegar.");
+                      alert("Mantén pulsado el campo de texto y elige Pegar.");
                     }
                   }}
                   style={{position:"absolute",top:"50%",right:7,transform:"translateY(-50%)",
@@ -3409,7 +3487,14 @@ export default function Maestro(){
                 </a>
               )}
             </div>
-            <button onClick={()=>setShowKeys(false)} style={{width:"100%",padding:"12px",border:"none",borderRadius:4,background:"rgba(0,180,255,0.15)",color:"#00cfff",fontFamily:"monospace",fontSize:14,cursor:"pointer",fontWeight:"bold"}}>✓ Guardar y cerrar</button>
+            <button onClick={()=>setShowKeys(false)}
+              style={{width:"100%",padding:"12px",border:"none",borderRadius:4,
+                      background:"rgba(0,180,255,0.18)",color:"#00cfff",
+                      fontFamily:"monospace",fontSize:14,cursor:"pointer",fontWeight:"bold",
+                      position:"sticky",bottom:8,zIndex:2,
+                      boxShadow:"0 6px 20px rgba(5,13,24,0.95)"}}>
+              ✓ Guardar y cerrar
+            </button>
             <p style={{fontSize:10,color:"#4a5a6a",marginTop:10,fontFamily:"monospace",textAlign:"center",lineHeight:1.5}}>
               🔒 Las claves se guardan solo en este dispositivo.<br/>No se envían a ningún servidor.
             </p>
@@ -3535,8 +3620,10 @@ export default function Maestro(){
                     <div style={{display:"flex",gap:6,marginTop:6}}>
                       <button onClick={()=>{
                           const txt=JSON.stringify(log,null,1);
-                          if(navigator.clipboard){navigator.clipboard.writeText(txt).then(()=>alert("Registro copiado. Pégalo en el chat."));}
-                          else{alert(txt.slice(0,1500));}
+                          copyText(txt).then(ok=>{
+                            alert(ok?"Registro copiado. Pégalo en el chat."
+                                   :"No se pudo copiar. Registro:\n\n"+txt.slice(0,1200));
+                          });
                         }}
                         style={{flex:1,padding:"7px",border:"1px solid rgba(0,180,255,0.25)",borderRadius:4,background:"rgba(0,180,255,0.08)",color:"#00cfff",fontFamily:"monospace",fontSize:10,cursor:"pointer"}}>
                         📋 Copiar registro
@@ -3549,6 +3636,7 @@ export default function Maestro(){
                   </div>
                 );
               })()}
+            </div>
             </div>
           </div>
         </div>
@@ -3925,7 +4013,7 @@ export default function Maestro(){
                     <h3 style={{fontSize:22,margin:"12px 0 8px",fontFamily:"Georgia,'Times New Roman',serif"}}>¡Problema resuelto!</h3>
                     <p style={{color:"#584627",margin:0,fontFamily:"Georgia,'Times New Roman',serif"}}>Has completado todos los pasos.</p>
                     <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:12}}>
-                      <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#3b2f1c",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>{const t=guide.titulo+(guide.pasos?.map((p,i)=>"\n"+(i+1)+". "+p.titulo+"\n"+p.descripcion)||[]).join("");navigator.clipboard?.writeText(t).then(()=>alert("¡Copiado!"));}}>📋 COPIAR</button>
+                      <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#3b2f1c",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>{const t=guide.titulo+(guide.pasos?.map((p,i)=>"\n"+(i+1)+". "+p.titulo+"\n"+p.descripcion)||[]).join("");copyText(t).then(ok=>alert(ok?"¡Copiado!":"No se pudo copiar automáticamente. Mantén pulsado el texto de la guía para seleccionarlo."));}}>📋 COPIAR</button>
                       <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#3b2f1c",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>window.print()}>📄 PDF</button>
                       <button style={{padding:"12px 18px",border:"1px solid rgba(87,204,153,0.3)",borderRadius:4,color:"#2f5e3a",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}}
                         onClick={()=>{const t=encodeURIComponent("📋 Guía MAESTRO: "+guide.titulo+"\n\n"+(guide.pasos?.map((p,i)=>(i+1)+". "+p.titulo+"\n"+p.descripcion)||[]).join("\n\n"));window.open("https://wa.me/?text="+t,"_blank");}}>
