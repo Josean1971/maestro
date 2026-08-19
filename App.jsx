@@ -122,6 +122,52 @@ async function readText(){
   return null;      // caller should ask the user to paste manually
 }
 
+
+// ---------------------------------------------------------------------------
+// Photo attachments. A picture of the actual fault tells the model far more
+// than a paragraph can, so images are downscaled in the browser and sent
+// alongside the description. Both providers accept base64 image parts.
+// ---------------------------------------------------------------------------
+const MAX_PHOTOS=3;
+
+// Phone cameras produce 4000px, 6MB files. Sending those wastes quota and can
+// exceed request limits, so every image is resized and re-encoded first.
+function prepareImage(file){
+  return new Promise((resolve,reject)=>{
+    if(!file.type.startsWith("image/")){ reject(new Error("no es una imagen")); return; }
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error("no se pudo leer"));
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error("formato no reconocido"));
+      img.onload=()=>{
+        const MAX=1200;                       // plenty for the model to read
+        let {width:w,height:h}=img;
+        if(w>MAX||h>MAX){
+          const k=MAX/Math.max(w,h);
+          w=Math.round(w*k); h=Math.round(h*k);
+        }
+        const c=document.createElement("canvas");
+        c.width=w; c.height=h;
+        const x=c.getContext("2d");
+        x.drawImage(img,0,0,w,h);
+        // JPEG at 0.8 is visually indistinguishable here and a fraction of the size
+        const url=c.toDataURL("image/jpeg",0.8);
+        resolve({
+          id:Date.now()+"_"+Math.random().toString(36).slice(2,7),
+          name:file.name||"foto.jpg",
+          preview:url,
+          media:"image/jpeg",
+          data:url.split(",")[1],             // base64 without the prefix
+          kb:Math.round(url.length*0.75/1024),
+        });
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function MatrixRain() {
   const canvasRef = React.useRef(null);
   React.useEffect(() => {
@@ -2909,6 +2955,25 @@ export default function Maestro(){
   const [screen,setScreen]=useState("home");
   const [selectedCategory,setSelectedCategory]=useState(null);
   const [problem,setProblem]=useState("");
+  const [photos,setPhotos]=useState([]);
+  const [photoBusy,setPhotoBusy]=useState(false);
+
+  const addPhotos=async(fileList)=>{
+    const files=Array.from(fileList||[]).slice(0,MAX_PHOTOS);
+    if(!files.length) return;
+    setPhotoBusy(true);
+    try{
+      const room=MAX_PHOTOS-photos.length;
+      if(room<=0){ alert(`Puedes adjuntar como máximo ${MAX_PHOTOS} fotos.`); return; }
+      const prepared=[];
+      for(const f of files.slice(0,room)){
+        try{ prepared.push(await prepareImage(f)); }
+        catch(e){ alert(`No se pudo usar "${f.name}": ${e.message}`); }
+      }
+      if(prepared.length) setPhotos(p=>[...p,...prepared]);
+    } finally { setPhotoBusy(false); }
+  };
+  const removePhoto=(id)=>setPhotos(p=>p.filter(x=>x.id!==id));
   const [guide,setGuide]=useState(null);
   const [loading,setLoading]=useState(false);
   const [completedSteps,setCompletedSteps]=useState([]);
@@ -3157,7 +3222,8 @@ export default function Maestro(){
   };
 
   const fetchGuide=async()=>{
-    if(!problem.trim()) return;
+    // A photo on its own is a valid request: the model can see the fault.
+    if(!problem.trim()&&!photos.length) return;
     setLoading(true);setScreen("guide");setCompletedSteps([]);setGuide(null);
     const lvlStr=level==="simple"?"Use very simple language for beginners, avoid technical terms, max 5 steps":level==="experto"?"Use technical professional language with advanced detail, 7-8 steps":"Use clear practical language, 5-7 steps";
     // The JSON keys stay in Spanish because the app reads them; only the values
@@ -3165,7 +3231,9 @@ export default function Maestro(){
     const sys="You are a universal expert. Respond ONLY with valid JSON. Keys (keep these key names exactly as given, in Spanish): titulo, dificultad, tiempo, herramientas (array), pasos (array of {titulo,descripcion,consejo}), advertencia, cuando_llamar_profesional. "
       +lvlStr+". Write ALL values in "+langInfo.label+" ("+langInfo.native+"). "
       +"The dificultad value must be one of: Facil, Moderado, Dificil, Experto - keep those in Spanish.";
-    const usr="Categoria: "+selectedCategory.label+". Consulta: "+problem+". Solo JSON.";
+    const usr="Categoria: "+selectedCategory.label+". Consulta: "+problem
+      +(photos.length?` El usuario adjunta ${photos.length} foto${photos.length>1?"s":""} del problema: examínala${photos.length>1?"s":""} y basa la guía en lo que se ve.`:"")
+      +" Solo JSON.";
     const parse=(raw)=>{let p=null;try{p=JSON.parse(raw);}catch(e){}if(!p){try{const clean=raw.replace(/^```(?:json)?/i,"").replace(/```$/,"").trim();p=JSON.parse(clean);}catch(e){}}if(!p){try{const m=raw.match(/\{[\s\S]*\}/);if(m)p=JSON.parse(m[0]);}catch(e){}}return p;};
     try{
       let raw="";
@@ -3183,7 +3251,12 @@ export default function Maestro(){
           }
           try{
             res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:h,
-              body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:4000,system:sys,messages:[{role:"user",content:usr}]})});
+              body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:4000,system:sys,
+                messages:[{role:"user",content:
+                  photos.length
+                    ? [...photos.map(p=>({type:"image",source:{type:"base64",media_type:p.media,data:p.data}})),
+                       {type:"text",text:usr}]
+                    : usr }]})});
           }catch(netErr){
             lastErr="Sin respuesta del servidor. Comprueba tu conexión.";
             lastStatus=0; continue;
@@ -3242,7 +3315,11 @@ export default function Maestro(){
             try{
               res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+apiKeys.gemini,
                 {method:"POST",headers:{"Content-Type":"application/json"},
-                 body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{parts:[{text:usr}]}],generationConfig:{maxOutputTokens:4000}})});
+                 body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},
+                   contents:[{parts:[
+                     ...photos.map(p=>({inlineData:{mimeType:p.media,data:p.data}})),
+                     {text:usr}
+                   ]}],generationConfig:{maxOutputTokens:4000}})});
             }catch(netErr){
               lastErr="Sin respuesta del servidor. Comprueba tu conexión.";
               lastStatus=0; continue;
@@ -3284,7 +3361,11 @@ export default function Maestro(){
                 for(const m of usable.slice(0,3)){
                   res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+apiKeys.gemini,
                     {method:"POST",headers:{"Content-Type":"application/json"},
-                     body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},contents:[{parts:[{text:usr}]}],generationConfig:{maxOutputTokens:4000}})});
+                     body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},
+                   contents:[{parts:[
+                     ...photos.map(p=>({inlineData:{mimeType:p.media,data:p.data}})),
+                     {text:usr}
+                   ]}],generationConfig:{maxOutputTokens:4000}})});
                   if(res.ok) break;
                   const e2=await res.json().catch(()=>({}));
                   lastStatus=res.status;
@@ -3314,7 +3395,11 @@ export default function Maestro(){
       const parsed=parse(raw);
       if(!parsed){setGuide({error:true,msg:"Error al parsear respuesta.",raw:raw.slice(0,300)});return;}
       setGuide(parsed);
-      const newEntry={id:Date.now(),category:selectedCategory,problem,guide:parsed,date:new Date().toLocaleDateString("es-ES"),ai:aiProvider,lang:guideLang};
+      const newEntry={id:Date.now(),category:selectedCategory,problem,guide:parsed,
+        date:new Date().toLocaleDateString("es-ES"),ai:aiProvider,lang:guideLang,
+        // Only the small previews are kept; the full base64 would blow the
+        // storage quota after a handful of guides.
+        thumbs:photos.map(p=>p.preview).slice(0,MAX_PHOTOS)};
       setActiveGuideId(newEntry.id);
       setHistory(prev=>[newEntry,...prev.slice(0,49)]);
     }catch(e){setGuide({error:true,msg:e.message||"Error de red."});}
@@ -3326,7 +3411,7 @@ export default function Maestro(){
     if(activeGuideId) setProgress(p=>({...p,[activeGuideId]:next}));
     return next;
   });
-  const reset=()=>{setScreen("home");setSelectedCategory(null);setProblem("");setGuide(null);setCompletedSteps([]);setViewHistory(false);setSearch("");setEnteredByStar(false);setJourney(null);setHistQuery("");setHistFilter("todas");};
+  const reset=()=>{setScreen("home");setSelectedCategory(null);setProblem("");setPhotos([]);setGuide(null);setCompletedSteps([]);setViewHistory(false);setSearch("");setEnteredByStar(false);setJourney(null);setHistQuery("");setHistFilter("todas");};
 
   // --- hardware back button -------------------------------------------------
   // Without this the device back button leaves the app entirely, even when the
@@ -3893,7 +3978,57 @@ export default function Maestro(){
                 <textarea style={{width:"100%",background:"transparent",border:"none",outline:"none",color:"#e8e2d2",fontSize:14,padding:"4px 6px",fontFamily:"Georgia,serif",resize:"none",boxSizing:"border-box",lineHeight:1.45,height:"100%",overflowY:"auto",textShadow:`0 0 10px ${accentColor}66, 0 1px 0 rgba(0,0,0,.8)`}} placeholder="Describe el problema... o pulsa 🎤" value={problem} onChange={e=>setProblem(e.target.value)} rows={2}/>
                 <button onClick={()=>listening?stopListening():startListening(t=>setProblem(p=>p?p+" "+t:t))} style={{position:"absolute",top:10,right:10,width:34,height:34,borderRadius:"50%",border:`2px solid ${listening?"#ff6b6b":"rgba(0,180,255,0.4)"}`,background:listening?"rgba(255,80,80,0.2)":"rgba(0,180,255,0.1)",color:listening?"#ff6b6b":"#00cfff",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{listening?"⏹":"🎤"}</button>
               </div>
-              <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,opacity:problem.trim()?1:0.4,fontFamily:"monospace"}} onClick={fetchGuide} disabled={!problem.trim()}>
+              {/* Thumbnails of whatever has been attached, each removable. */}
+              {photos.length>0&&(
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {photos.map(p=>(
+                    <div key={p.id} style={{position:"relative",width:52,height:52,
+                                            borderRadius:4,overflow:"hidden",
+                                            border:"1px solid rgba(120,98,58,0.5)"}}>
+                      <img src={p.preview} alt={p.name}
+                           style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                      <button onClick={()=>removePhoto(p.id)} title="Quitar"
+                        style={{position:"absolute",top:1,right:1,width:17,height:17,
+                                borderRadius:"50%",border:"none",background:"rgba(0,0,0,0.72)",
+                                color:"#fff",fontSize:11,lineHeight:1,cursor:"pointer",padding:0}}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{display:"flex",gap:7,alignItems:"center"}}>
+                {/* `capture` opens the camera straight away on a phone, which is
+                    what people want when the fault is in front of them. */}
+                <label title="Hacer una foto"
+                  style={{flex:"0 0 auto",padding:"9px 12px",borderRadius:4,
+                          border:`1px solid ${accentColor}55`,background:`${accentColor}14`,
+                          color:accentColor,fontFamily:"monospace",fontSize:12,
+                          cursor:photos.length>=MAX_PHOTOS?"not-allowed":"pointer",
+                          opacity:photos.length>=MAX_PHOTOS?0.4:1}}>
+                  📷
+                  <input type="file" accept="image/*" capture="environment"
+                    disabled={photos.length>=MAX_PHOTOS} style={{display:"none"}}
+                    onChange={e=>{addPhotos(e.target.files);e.target.value="";}}/>
+                </label>
+                <label title="Elegir de la galería"
+                  style={{flex:"0 0 auto",padding:"9px 12px",borderRadius:4,
+                          border:`1px solid ${accentColor}55`,background:"transparent",
+                          color:accentColor,fontFamily:"monospace",fontSize:12,
+                          cursor:photos.length>=MAX_PHOTOS?"not-allowed":"pointer",
+                          opacity:photos.length>=MAX_PHOTOS?0.4:1}}>
+                  🖼
+                  <input type="file" accept="image/*" multiple
+                    disabled={photos.length>=MAX_PHOTOS} style={{display:"none"}}
+                    onChange={e=>{addPhotos(e.target.files);e.target.value="";}}/>
+                </label>
+                <span style={{fontFamily:"monospace",fontSize:10,color:"#7a6440",flex:1}}>
+                  {photoBusy ? "preparando…"
+                    : photos.length ? `${photos.length}/${MAX_PHOTOS} foto${photos.length>1?"s":""}`
+                    : "adjunta una foto del problema"}
+                </span>
+              </div>
+
+              <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#000",fontSize:15,fontWeight:"bold",cursor:"pointer",background:accentColor,opacity:(problem.trim()||photos.length)?1:0.4,fontFamily:"monospace"}} onClick={fetchGuide} disabled={!problem.trim()&&!photos.length}>
                 GENERAR GUÍA PASO A PASO →
               </button>
             </div>
