@@ -840,6 +840,82 @@ const SYNONYMS={
 };
 const norm0=(v)=>String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 
+
+// ---------------------------------------------------------------------------
+// Free resources for film and TV work. Each entry carries the words that make
+// it relevant, so a step about sound offers audio libraries and a step about
+// screenwriting offers script tools - rather than the same list every time.
+//
+// Only long-established, genuinely free sites are listed: link rot is the
+// enemy here, and a dead button is worse than no button.
+// ---------------------------------------------------------------------------
+const FILM_RESOURCES=[
+  {label:"Archive.org", url:"https://archive.org/details/movies",
+   what:"metraje y películas de dominio público",
+   when:["metraje","archivo","dominio publico","stock","material","referencia","documental"]},
+  {label:"Pexels Video", url:"https://www.pexels.com/videos/",
+   what:"clips gratuitos sin atribución",
+   when:["metraje","stock","clip","plano","recurso","insert","fondo"]},
+  {label:"Pixabay", url:"https://pixabay.com/videos/",
+   what:"vídeo e imágenes libres",
+   when:["metraje","stock","imagen","fondo","textura","recurso"]},
+  {label:"Freesound", url:"https://freesound.org/",
+   what:"efectos de sonido de la comunidad",
+   when:["sonido","audio","efecto","foley","ambiente","ruido","grabacion","microfono","mezcla"]},
+  {label:"Free Music Archive", url:"https://freemusicarchive.org/",
+   what:"música con licencia libre",
+   when:["musica","banda sonora","cancion","score","ambiente","audio"]},
+  {label:"YouTube Audio Library", url:"https://studio.youtube.com/channel/UC/music",
+   what:"música y efectos sin copyright",
+   when:["musica","audio","sonido","banda sonora","copyright","licencia"]},
+  {label:"DaVinci Resolve", url:"https://www.blackmagicdesign.com/products/davinciresolve",
+   what:"montaje y etalonaje profesional, gratuito",
+   when:["montaje","editar","edicion","postproduccion","color","etalonaje","corte","render","exportar"]},
+  {label:"Shotcut", url:"https://shotcut.org/",
+   what:"editor de vídeo libre y ligero",
+   when:["montaje","editar","edicion","corte","software","programa"]},
+  {label:"Blender", url:"https://www.blender.org/",
+   what:"3D, VFX y composición",
+   when:["vfx","efecto","3d","animacion","croma","composicion","tracking","render"]},
+  {label:"Natron", url:"https://natrongithub.github.io/",
+   what:"composición nodal libre",
+   when:["vfx","composicion","croma","chroma","rotoscopia","tracking"]},
+  {label:"Trelby", url:"https://www.trelby.org/",
+   what:"guion con formato profesional",
+   when:["guion","guionista","escribir","formato","escaleta","dialogo","escena","personaje"]},
+  {label:"Fountain", url:"https://fountain.io/",
+   what:"formato de guion en texto plano",
+   when:["guion","escribir","formato","escaleta","borrador"]},
+  {label:"Storyboarder", url:"https://wonderunit.com/storyboarder/",
+   what:"storyboards gratis",
+   when:["storyboard","guion grafico","plano","planificacion","previsualizacion","encuadre"]},
+  {label:"Subtitle Edit", url:"https://www.nikse.dk/subtitleedit",
+   what:"subtitulado y sincronización",
+   when:["subtitul","srt","traduccion","accesibilidad","sincroniz"]},
+  {label:"HandBrake", url:"https://handbrake.fr/",
+   what:"conversión y compresión de vídeo",
+   when:["exportar","comprimir","formato","codec","convertir","render","entrega"]},
+  {label:"OBS Studio", url:"https://obsproject.com/",
+   what:"grabación y directo",
+   when:["grabar","directo","streaming","captura","emision","pantalla"]},
+  {label:"Creative Commons", url:"https://search.creativecommons.org/",
+   what:"buscador de material reutilizable",
+   when:["licencia","derechos","copyright","permiso","atribucion","legal"]},
+];
+
+// Picks the resources that actually match a step, best first, at most three.
+function filmResourcesFor(text){
+  const n=(v)=>String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const hay=n(text);
+  if(!hay) return [];
+  const scored=FILM_RESOURCES.map(r=>{
+    let score=0;
+    r.when.forEach(w=>{ if(hay.includes(n(w))) score++; });
+    return {r,score};
+  }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
+  return scored.slice(0,3).map(x=>x.r);
+}
+
 const ALL_CATS=SECTIONS.flatMap(s=>s.categories.map(c=>({...c,sectionColor:s.color,sectionLabel:s.label})));
 
 // ── COLUMN FRAME WITH FLOATING CLOUDS ──
@@ -4138,11 +4214,65 @@ export default function Maestro(){
                         {!done&&<div style={{display:"flex",gap:8,padding:"10px 17px 13px 61px",borderTop:"1px solid rgba(120,98,58,0.22)"}}>
                           <a href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:4,background:"rgba(163,52,23,0.14)",border:"1px solid rgba(163,52,23,0.35)",color:"#8f2a12",fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",textDecoration:"none",fontWeight:"600"}}>▶ YouTube</a>
                           <a href={`https://www.google.com/search?tbm=isch&q=${query}`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:4,background:"rgba(31,79,138,0.13)",border:"1px solid rgba(31,79,138,0.32)",color:"#1f4f8a",fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",textDecoration:"none",fontWeight:"600"}}>🖼 Imágenes</a>
+
+                          {/* Free tools and libraries, chosen by what this
+                              particular step is about rather than listed wholesale. */}
+                          {selectedCategory?.id==="cine_tv" &&
+                            filmResourcesFor(paso.titulo+" "+(paso.descripcion||"")+" "+(paso.consejo||""))
+                              .map(r=>(
+                                <a key={r.label} href={r.url} target="_blank" rel="noopener noreferrer"
+                                   onClick={e=>e.stopPropagation()} title={r.what}
+                                   style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",
+                                           borderRadius:4,background:"rgba(90,72,40,0.13)",
+                                           border:"1px solid rgba(120,98,58,0.35)",color:"#5f4c2e",
+                                           fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",
+                                           textDecoration:"none",fontWeight:"600"}}>
+                                  ⬡ {r.label}
+                                </a>
+                              ))}
                         </div>}
                       </div>
                     );
                   })}
                 </div>
+
+                {/* A full index at the end, for anything the individual steps
+                    did not happen to surface. */}
+                {selectedCategory?.id==="cine_tv"&&(
+                  <div style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",
+                               borderRadius:4,padding:"16px 20px",marginBottom:24}}>
+                    <h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 4px",
+                                fontFamily:"Georgia,'Times New Roman',serif",letterSpacing:"0.06em",
+                                textTransform:"uppercase"}}>🎬 Recursos gratuitos</h3>
+                    <p style={{fontSize:11,color:"#6b5636",margin:"0 0 12px",
+                               fontFamily:"Georgia,'Times New Roman',serif"}}>
+                      Herramientas y bibliotecas libres para cada fase del trabajo
+                    </p>
+                    <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                      {FILM_RESOURCES.map(r=>(
+                        <a key={r.label} href={r.url} target="_blank" rel="noopener noreferrer"
+                           style={{display:"flex",alignItems:"baseline",gap:8,textDecoration:"none",
+                                   padding:"6px 10px",borderRadius:4,
+                                   background:"rgba(120,98,58,0.10)",
+                                   border:"1px solid rgba(120,98,58,0.22)"}}>
+                          <span style={{fontSize:13,fontWeight:"bold",color:"#4a3c24",
+                                        fontFamily:"Georgia,'Times New Roman',serif",flexShrink:0}}>
+                            {r.label}
+                          </span>
+                          <span style={{fontSize:11,color:"#6b5636",
+                                        fontFamily:"Georgia,'Times New Roman',serif"}}>
+                            {r.what}
+                          </span>
+                          <span style={{marginLeft:"auto",color:"#8a7550",fontSize:12,flexShrink:0}}>↗</span>
+                        </a>
+                      ))}
+                    </div>
+                    <p style={{fontSize:10,color:"#7a6440",margin:"11px 0 0",
+                               fontFamily:"Georgia,'Times New Roman',serif",lineHeight:1.5}}>
+                      Comprueba siempre la licencia de cada material antes de publicar tu obra.
+                    </p>
+                  </div>
+                )}
 
                 {guide.cuando_llamar_profesional&&<div style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"16px 20px",marginBottom:28}}><h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 10px",fontFamily:"Georgia,'Times New Roman',serif",textTransform:"uppercase",letterSpacing:"0.06em"}}>👷 ¿Cuándo llamar a un profesional?</h3><p style={{margin:0,fontSize:14,color:"#5c4a2c",lineHeight:1.6,fontFamily:"Georgia,'Times New Roman',serif"}}>{guide.cuando_llamar_profesional}</p></div>}
 
