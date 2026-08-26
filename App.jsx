@@ -3517,12 +3517,102 @@ export default function Maestro(){
     finally{setLoading(false);setLoadingNote("");}
   };
 
+  // --- follow-up questions --------------------------------------------------
+  // Each question is answered on its own: the guide goes along for context but
+  // previous answers do not, which keeps every request small and cheap.
+  const [followUps,setFollowUps]=useState([]);      // {q, a, photos, at}
+  const [question,setQuestion]=useState("");
+  const [qPhotos,setQPhotos]=useState([]);
+  const [asking,setAsking]=useState(false);
+
+  const addQPhotos=async(fileList)=>{
+    const files=Array.from(fileList||[]).slice(0,MAX_PHOTOS);
+    if(!files.length) return;
+    const room=MAX_PHOTOS-qPhotos.length;
+    if(room<=0){ alert(`Máximo ${MAX_PHOTOS} fotos por pregunta.`); return; }
+    const out=[];
+    for(const f of files.slice(0,room)){
+      try{ out.push(await prepareImage(f)); }
+      catch(e){ alert(`No se pudo usar "${f.name}": ${e.message}`); }
+    }
+    if(out.length) setQPhotos(p=>[...p,...out]);
+  };
+
+  const askFollowUp=async()=>{
+    const q=question.trim();
+    if(!q&&!qPhotos.length) return;
+    if(!guide||guide.error) return;
+    setAsking(true);
+
+    // A compact digest of the guide: enough for the model to answer in context
+    // without resending every word of it.
+    const resumen=[
+      "Guía: "+(guide.titulo||""),
+      guide.herramientas?.length?("Herramientas: "+guide.herramientas.join(", ")):"",
+      "Pasos: "+(guide.pasos||[]).map((p,i)=>(i+1)+". "+p.titulo).join("; "),
+      guide.advertencia?("Advertencia: "+guide.advertencia):"",
+    ].filter(Boolean).join("\n");
+
+    const sys="Eres un experto en "+(selectedCategory?.label||"la materia")
+      +". El usuario sigue una guía tuya y tiene una duda concreta. "
+      +"Responde en "+langInfo.label+", de forma directa y práctica, en texto plano sin JSON ni markdown. "
+      +"Máximo 6 frases. Si la duda revela un riesgo, adviértelo primero.";
+    const usr=resumen+"\n\nPregunta del usuario: "+(q||"(mira las fotos adjuntas)")
+      +(qPhotos.length?` Adjunta ${qPhotos.length} foto${qPhotos.length>1?"s":""}: examínala${qPhotos.length>1?"s":""}.`:"");
+
+    let answer="";
+    try{
+      if(aiProvider==="claude"){
+        const h={"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};
+        if(apiKeys.claude) h["x-api-key"]=apiKeys.claude;
+        const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:h,
+          body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:700,system:sys,
+            messages:[{role:"user",content: qPhotos.length
+              ? [...qPhotos.map(p=>({type:"image",source:{type:"base64",media_type:p.media,data:p.data}})),
+                 {type:"text",text:usr}]
+              : usr }]})});
+        if(!r.ok) throw new Error("La IA no pudo responder ahora mismo.");
+        const d=await r.json();
+        answer=d.content.map(b=>b.text||"").join("").trim();
+      } else {
+        if(!apiKeys.gemini) throw new Error("Añade tu clave de Gemini en ⚙️.");
+        let list=["gemini-3.7-flash","gemini-flash-latest","gemini-2.5-flash"];
+        try{
+          const c=JSON.parse(localStorage.getItem("maestro_gemini_models")||"null");
+          if(c&&Array.isArray(c.list)) list=c.list;
+        }catch(e){}
+        let r=null;
+        for(const m of list){
+          r=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+apiKeys.gemini,
+            {method:"POST",headers:{"Content-Type":"application/json"},
+             body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},
+               contents:[{parts:[
+                 ...qPhotos.map(p=>({inlineData:{mimeType:p.media,data:p.data}})),
+                 {text:usr}]}],
+               generationConfig:{maxOutputTokens:700}})});
+          if(r.ok) break;
+        }
+        if(!r||!r.ok) throw new Error("La IA no pudo responder ahora mismo.");
+        const d=await r.json();
+        answer=(d?.candidates?.[0]?.content?.parts?.[0]?.text||"").trim();
+      }
+      if(!answer) throw new Error("Respuesta vacía.");
+      setFollowUps(f=>[...f,{q:q||"(consulta sobre las fotos)",a:answer,
+                             photos:qPhotos.map(p=>p.preview),at:Date.now()}]);
+      setQuestion(""); setQPhotos([]);
+    }catch(e){
+      setFollowUps(f=>[...f,{q:q||"(consulta sobre las fotos)",
+                             a:"⚠️ "+(e.message||"No se pudo responder."),error:true,
+                             photos:qPhotos.map(p=>p.preview),at:Date.now()}]);
+    } finally { setAsking(false); }
+  };
+
   const toggleStep=i=>setCompletedSteps(prev=>{
     const next=prev.includes(i)?prev.filter(s=>s!==i):[...prev,i];
     if(activeGuideId) setProgress(p=>({...p,[activeGuideId]:next}));
     return next;
   });
-  const reset=()=>{setScreen("home");setSelectedCategory(null);setProblem("");setPhotos([]);setGuide(null);setCompletedSteps([]);setViewHistory(false);setSearch("");setEnteredByStar(false);setJourney(null);setHistQuery("");setHistFilter("todas");};
+  const reset=()=>{setScreen("home");setSelectedCategory(null);setProblem("");setPhotos([]);setGuide(null);setFollowUps([]);setQuestion("");setQPhotos([]);setCompletedSteps([]);setViewHistory(false);setSearch("");setEnteredByStar(false);setJourney(null);setHistQuery("");setHistFilter("todas");};
 
   // --- hardware back button -------------------------------------------------
   // Without this the device back button leaves the app entirely, even when the
@@ -3548,6 +3638,7 @@ export default function Maestro(){
     setGuide(item.guide);
     setActiveGuideId(item.id);
     setCompletedSteps(progress[item.id]||[]);   // resume where it was left
+    setFollowUps([]); setQuestion(""); setQPhotos([]);
     setViewHistory(false);
     setScreen("guide");
   };
@@ -4308,6 +4399,110 @@ export default function Maestro(){
                 )}
 
                 {guide.cuando_llamar_profesional&&<div style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"16px 20px",marginBottom:28}}><h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 10px",fontFamily:"Georgia,'Times New Roman',serif",textTransform:"uppercase",letterSpacing:"0.06em"}}>👷 ¿Cuándo llamar a un profesional?</h3><p style={{margin:0,fontSize:14,color:"#5c4a2c",lineHeight:1.6,fontFamily:"Georgia,'Times New Roman',serif"}}>{guide.cuando_llamar_profesional}</p></div>}
+
+                {/* Ask about anything the guide did not cover. Answers are
+                    independent of each other, so each request stays small. */}
+                <div style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",
+                             borderRadius:4,padding:"16px 20px",marginBottom:28}}>
+                  <h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 4px",
+                              fontFamily:"Georgia,'Times New Roman',serif",letterSpacing:"0.06em",
+                              textTransform:"uppercase"}}>💬 ¿Alguna duda?</h3>
+                  <p style={{fontSize:11,color:"#6b5636",margin:"0 0 12px",
+                             fontFamily:"Georgia,'Times New Roman',serif"}}>
+                    Pregunta lo que necesites sobre esta guía, o enseña una foto de cómo va
+                  </p>
+
+                  {followUps.map((f,i)=>(
+                    <div key={f.at+"_"+i} style={{marginBottom:14}}>
+                      <div style={{display:"flex",gap:8,marginBottom:6}}>
+                        <span style={{fontSize:13,flexShrink:0}}>❓</span>
+                        <p style={{margin:0,fontSize:13,color:"#3b2f1c",fontWeight:"bold",
+                                   fontFamily:"Georgia,'Times New Roman',serif",lineHeight:1.45}}>{f.q}</p>
+                      </div>
+                      {f.photos?.length>0&&(
+                        <div style={{display:"flex",gap:5,margin:"0 0 7px 21px"}}>
+                          {f.photos.map((src,k)=>(
+                            <img key={k} src={src} alt=""
+                                 style={{width:42,height:42,objectFit:"cover",borderRadius:3,
+                                         border:"1px solid rgba(120,98,58,0.4)"}}/>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{display:"flex",gap:8,marginLeft:0}}>
+                        <span style={{fontSize:13,flexShrink:0}}>{f.error?"⚠️":"⬡"}</span>
+                        <p style={{margin:0,fontSize:13,lineHeight:1.6,
+                                   color:f.error?"#8a2f18":"#3f331e",
+                                   fontFamily:"Georgia,'Times New Roman',serif",
+                                   whiteSpace:"pre-wrap"}}>{f.a}</p>
+                      </div>
+                    </div>
+                  ))}
+
+                  {qPhotos.length>0&&(
+                    <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
+                      {qPhotos.map(p=>(
+                        <div key={p.id} style={{position:"relative",width:44,height:44,
+                                                borderRadius:3,overflow:"hidden",
+                                                border:"1px solid rgba(120,98,58,0.45)"}}>
+                          <img src={p.preview} alt=""
+                               style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                          <button onClick={()=>setQPhotos(x=>x.filter(y=>y.id!==p.id))}
+                            style={{position:"absolute",top:0,right:0,width:15,height:15,border:"none",
+                                    background:"rgba(0,0,0,0.7)",color:"#fff",fontSize:10,
+                                    cursor:"pointer",padding:0,lineHeight:1}}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <textarea value={question} onChange={e=>setQuestion(e.target.value)}
+                    placeholder="Escribe tu duda..." rows={2} disabled={asking}
+                    style={{width:"100%",background:"rgba(255,255,255,0.30)",
+                            border:"1px solid rgba(120,98,58,0.35)",borderRadius:4,
+                            color:"#3b2f1c",fontSize:13,padding:"9px 11px",
+                            fontFamily:"Georgia,'Times New Roman',serif",resize:"vertical",
+                            boxSizing:"border-box",lineHeight:1.5,marginBottom:8}}/>
+
+                  <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
+                    <label title="Hacer una foto"
+                      style={{padding:"8px 11px",borderRadius:4,border:"1px solid rgba(120,98,58,0.35)",
+                              background:"rgba(120,98,58,0.10)",color:"#5f4c2e",fontSize:13,
+                              cursor:qPhotos.length>=MAX_PHOTOS?"not-allowed":"pointer",
+                              opacity:qPhotos.length>=MAX_PHOTOS?0.4:1}}>
+                      📷
+                      <input type="file" accept="image/*" capture="environment"
+                        disabled={qPhotos.length>=MAX_PHOTOS||asking} style={{display:"none"}}
+                        onChange={e=>{addQPhotos(e.target.files);e.target.value="";}}/>
+                    </label>
+                    <label title="Elegir de la galería"
+                      style={{padding:"8px 11px",borderRadius:4,border:"1px solid rgba(120,98,58,0.35)",
+                              background:"transparent",color:"#5f4c2e",fontSize:13,
+                              cursor:qPhotos.length>=MAX_PHOTOS?"not-allowed":"pointer",
+                              opacity:qPhotos.length>=MAX_PHOTOS?0.4:1}}>
+                      🖼
+                      <input type="file" accept="image/*" multiple
+                        disabled={qPhotos.length>=MAX_PHOTOS||asking} style={{display:"none"}}
+                        onChange={e=>{addQPhotos(e.target.files);e.target.value="";}}/>
+                    </label>
+                    <button onClick={()=>listening?stopListening():startListening(t=>setQuestion(p=>p?p+" "+t:t))}
+                      title="Dictar" disabled={asking}
+                      style={{padding:"8px 11px",borderRadius:4,
+                              border:`1px solid ${listening?"rgba(150,60,30,0.5)":"rgba(120,98,58,0.35)"}`,
+                              background:listening?"rgba(150,60,30,0.14)":"transparent",
+                              color:listening?"#8a2f18":"#5f4c2e",fontSize:13,cursor:"pointer"}}>
+                      {listening?"⏹":"🎤"}
+                    </button>
+                    <button onClick={askFollowUp}
+                      disabled={asking||(!question.trim()&&!qPhotos.length)}
+                      style={{flex:1,minWidth:130,padding:"9px 16px",border:"none",borderRadius:4,
+                              background:"#5c4a2c",color:"#f2e8cd",fontSize:13,fontWeight:"bold",
+                              fontFamily:"Georgia,'Times New Roman',serif",
+                              cursor:asking?"wait":"pointer",
+                              opacity:(asking||(!question.trim()&&!qPhotos.length))?0.45:1}}>
+                      {asking?"Consultando…":"Preguntar →"}
+                    </button>
+                  </div>
+                </div>
 
                 {guide.pasos&&completedSteps.length===guide.pasos.length&&(
                   <div style={{textAlign:"center",background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"32px 24px"}}>
