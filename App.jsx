@@ -289,14 +289,12 @@ function useMatrixAudio() {
       [[0,523.3,2.0,0.15],[2.5,493.9,1.5,0.14],[4,440,2.5,0.16],[7,392,3.0,0.18],[10.5,440,2.0,0.16],[13,493.9,2.5,0.15],[16,523.3,2.0,0.16],[18.5,587.3,3.5,0.18],[22.5,523.3,2.0,0.16],[25,493.9,1.5,0.14],[27,440,2.5,0.16],[30,392,4.5,0.18]],
       [[0,196,3.0,0.18],[3.5,220,2.5,0.18],[6.5,246.9,2.0,0.18],[9,261.6,3.5,0.20],[13,293.7,2.5,0.18],[16,261.6,2.0,0.18],[18.5,246.9,2.5,0.18],[21.5,220,3.5,0.20],[25.5,196,2.5,0.18],[28,174.6,2.0,0.16],[30.5,196,2.0,0.18],[33,220,4.5,0.20]],
       [[0,330,1.8,0.17],[2,392,1.5,0.16],[3.5,440,1.8,0.17],[5.5,392,1.5,0.16],[7,330,2.5,0.18],[10,293.7,2.0,0.18],[12.5,330,1.8,0.17],[14.5,392,2.5,0.18],[17.5,440,2.0,0.18],[20,493.9,3.0,0.20],[23.5,440,2.0,0.18],[26,392,2.5,0.18],[29,330,4.0,0.20]],
-      [[0,293.7,2.5,0.18],[3,261.6,2.0,0.18],[5.5,246.9,1.5,0.16],[7,220,3.0,0.20],[10.5,246.9,2.0,0.18],[13,261.6,2.5,0.18],[16,293.7,2.0,0.18],[18.5,329.6,3.5,0.20],[22.5,293.7,2.0,0.18],[25,261.6,2.0,0.18],[27.5,246.9,1.5,0.16],[29.5,220,5.0,0.22]],
-    ];
+      [[0,293.7,2.5,0.18],[3,261.6,2.0,0.18],[5.5,246.9,1.5,0.16],[7,220,3.0,0.20],[10.5,246.9,2.0,0.18],[13,261.6,2.5,0.18],[16,293.7,2.0,0.18],[18.5,329.6,3.5,0.20],[22.5,293.7,2.0,0.18],[25,261.6,2.0,0.18],[27.5,246.9,1.5,0.16],[29.5,220,5.0,0.22]]];
     const ARP_PATS=[
       [[0.5,0],[1.0,1],[1.5,2],[2.0,1],[2.5,0],[3.0,2],[3.5,1]],
       [[0.25,1],[0.75,2],[1.25,0],[1.75,2],[2.25,1],[2.75,0],[3.25,2]],
       [[0.5,2],[1.5,1],[2.5,0],[3.5,2]],
-      [[0.33,0],[1.0,2],[1.66,1],[2.33,0],[3.0,2],[3.66,1]],
-    ];
+      [[0.33,0],[1.0,2],[1.66,1],[2.33,0],[3.0,2],[3.66,1]]];
 
     const S={nextBeat:ctx.currentTime+0.5, beat:0};
     stateRef.current=S;
@@ -640,6 +638,7 @@ const ICONS = {
   fotografia:{d:"M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z",d2:"M12 17a4 4 0 100-8 4 4 0 000 8z"},
   costura:{d:"M20 4L4 20M4 4l16 16",d2:"M12 4v4M12 16v4M4 12h4M16 12h4"},
   cine_tv:{d:"M2 5h20v14H2z",d2:"M7 5v14M17 5v14M2 9h5M2 15h5M17 9h5M17 15h5M10 9l4 3-4 3z"},
+  videojuegos:{d:"M7 8h10a5 5 0 015 5v1a4 4 0 01-7 2.7L13 16h-2l-2 .7A4 4 0 012 14v-1a5 5 0 015-5z",d2:"M7 11v3M5.5 12.5h3M16 11.5h.01M18.5 13.5h.01"},
   otro:{d:"M12 2a10 10 0 100 20A10 10 0 0012 2z",d2:"M12 8h.01M11 12h1v4h1"},
   dep_futbol:{d:"M12 2a10 10 0 100 20A10 10 0 0012 2z",d2:"M12 7l4 3-1.5 5h-5L8 10z M12 2v5M2.5 9l5.5 1M21.5 9l-5.5 1M6 20l3.5-5M18 20l-3.5-5"},
   dep_baloncesto:{d:"M12 2a10 10 0 100 20A10 10 0 0012 2z",d2:"M12 2v20M2 12h20M4.9 4.9c4 4 4 10.2 0 14.2M19.1 4.9c-4 4-4 10.2 0 14.2"},
@@ -739,7 +738,7 @@ const SECTIONS=[
   {label:"RED // SOFTWARE",color:"#52b788",categories:[{id:"windows",label:"Windows"},{id:"linux",label:"Linux & Unix"},{id:"macos",label:"macOS"},{id:"programacion",label:"Programación & Código"},{id:"bases_datos",label:"Bases de Datos"},{id:"servidores",label:"Servidores & Cloud"},{id:"apps_movil",label:"Apps Móviles"},{id:"ciberseguridad",label:"Ciberseguridad"}]},
   {label:"BIOSCAN // AGRÍCOLA",color:"#e9c46a",categories:[{id:"riego",label:"Sistemas de Riego"},{id:"maquinaria_agricola",label:"Maquinaria Agrícola"},{id:"plagas",label:"Control de Plagas"},{id:"suelo",label:"Suelo & Cultivos"},{id:"energia_solar",label:"Energía Solar"},{id:"agua",label:"Tratamiento de Agua"},{id:"animales",label:"Veterinaria & Animales"},{id:"invernadero",label:"Invernaderos"}]},
   {label:"MEDLAB // SALUD",color:"#f72585",categories:[{id:"primeros_auxilios",label:"Primeros Auxilios"},{id:"medicamentos",label:"Medicamentos & Dosis"},{id:"equipos_medicos",label:"Equipos Médicos"},{id:"emergencias",label:"Emergencias"},{id:"ergonomia",label:"Ergonomía & Postura"},{id:"aire",label:"Calidad del Aire"},{id:"especialidades_medicas",label:"Especialidades Médicas"}]},
-  {label:"NEXUS // CREATIVOS",color:"#a8dadc",categories:[{id:"impresion3d",label:"Impresión 3D"},{id:"drones",label:"Drones & RC"},{id:"musica",label:"Instrumentos & Audio"},{id:"fotografia",label:"Fotografía & Video"},{id:"costura",label:"Costura & Textiles"},{id:"cine_tv",label:"Cine & TV"},{id:"otro",label:"Otro / General"}]},
+  {label:"NEXUS // CREATIVOS",color:"#a8dadc",categories:[{id:"impresion3d",label:"Impresión 3D"},{id:"drones",label:"Drones & RC"},{id:"musica",label:"Instrumentos & Audio"},{id:"fotografia",label:"Fotografía & Video"},{id:"costura",label:"Costura & Textiles"},{id:"cine_tv",label:"Cine & TV"},{id:"videojuegos",label:"Videojuegos"},{id:"otro",label:"Otro / General"}]},
   {label:"ARENA // DEPORTES",color:"#4cc9f0",categories:[{id:"dep_futbol",label:"Fútbol"},{id:"dep_baloncesto",label:"Baloncesto & Canasta"},{id:"dep_ciclismo",label:"Ciclismo"},{id:"dep_running",label:"Running & Atletismo"},{id:"dep_natacion",label:"Natación"},{id:"dep_gimnasio",label:"Gimnasio & Fuerza"},{id:"dep_artes_marciales",label:"Artes Marciales"},{id:"dep_tenis",label:"Tenis & Raqueta"},{id:"dep_montana",label:"Montaña & Escalada"},{id:"dep_acuaticos",label:"Deportes Acuáticos"},{id:"dep_motor",label:"Deportes de Motor"},{id:"dep_equipo",label:"Deportes de Equipo"},{id:"dep_nutricion",label:"Nutrición Deportiva"},{id:"dep_lesiones",label:"Lesiones & Recuperación"},{id:"dep_entrenamiento",label:"Planes de Entrenamiento"},{id:"dep_arbitraje",label:"Reglamento & Arbitraje"}]},
   {label:"ARCHIVO // HISTORIA",color:"#e2b96f",categories:[{id:"historia_antigua",label:"Historia Antigua"},{id:"historia_moderna",label:"Historia Moderna"},{id:"historia_contemporanea",label:"Historia Contemporánea"},{id:"geopolitica",label:"Geopolítica"},{id:"arqueologia",label:"Arqueología"},{id:"filosofia",label:"Filosofía"},{id:"mitologia",label:"Mitología"},{id:"arte_historia",label:"Historia del Arte"}]},
   {label:"LEXIS // DERECHO",color:"#c0a0ff",categories:[{id:"derecho_civil",label:"Derecho Civil"},{id:"derecho_penal",label:"Derecho Penal"},{id:"derecho_laboral",label:"Derecho Laboral"},{id:"derecho_mercantil",label:"Derecho Mercantil"},{id:"derecho_internacional",label:"Derecho Internacional"},{id:"derecho_constitucional",label:"Constitucional"},{id:"contratos",label:"Contratos & Notaría"},{id:"propiedad_intelectual",label:"Propiedad Intelectual"}]},
@@ -748,8 +747,7 @@ const SECTIONS=[
   {label:"SIGMA // CC. SOCIALES",color:"#ff9a3c",categories:[{id:"psicologia",label:"Psicología"},{id:"sociologia",label:"Sociología"},{id:"antropologia",label:"Antropología"},{id:"politica",label:"Ciencia Política"},{id:"comunicacion",label:"Comunicación & Media"},{id:"educacion",label:"Educación & Pedagogía"},{id:"linguistica",label:"Lingüística & Idiomas"},{id:"geografia",label:"Geografía"}]},
   {label:"VERTEX // HUMANIDADES",color:"#ff6eb4",categories:[{id:"literatura",label:"Literatura"},{id:"escritura",label:"Escritura & Redacción"},{id:"poesia",label:"Poesía & Prosa"},{id:"teatro",label:"Teatro & Dramaturgia"},{id:"etica",label:"Ética & Moral"},{id:"religion",label:"Religión & Espiritualidad"},{id:"logica",label:"Lógica & Argumentación"},{id:"retorica",label:"Retórica & Debate"}]},
   {label:"⚔ COMANDO // MILITAR",color:"#7fff00",categories:[{id:"mil_ejercito",label:"Ejército & Infantería"},{id:"mil_marina",label:"Marina & Fuerzas Navales"},{id:"mil_aviacion",label:"Aviación Militar"},{id:"mil_fuerzas_especiales",label:"Fuerzas Especiales"},{id:"mil_inteligencia",label:"Inteligencia & Contrainteligencia"},{id:"mil_armamento",label:"Armamento & Balística"},{id:"mil_tactica",label:"Táctica & Estrategia"},{id:"mil_historia_militar",label:"Historia Militar"},{id:"mil_ciberguerra",label:"Ciberguerra & EW"},{id:"mil_logistica",label:"Logística Militar"},{id:"mil_medicina_combate",label:"Medicina de Combate"},{id:"mil_derecho",label:"Derecho Internacional Bélico"}]},
-  {label:"🛡 OMEGA // SUPERVIVENCIA",color:"#ff8c00",categories:[{id:"surv_wilderness",label:"Supervivencia Wilderness"},{id:"surv_urbana",label:"Supervivencia Urbana"},{id:"surv_agua",label:"Obtención de Agua"},{id:"surv_fuego",label:"Fuego & Calor"},{id:"surv_refugio",label:"Construcción de Refugios"},{id:"surv_alimentacion",label:"Caza, Pesca & Forrajeo"},{id:"surv_primeros_auxilios_surv",label:"Primeros Auxilios Campo"},{id:"surv_navegacion",label:"Navegación & Orientación"},{id:"surv_señales",label:"Señales & Rescate"},{id:"surv_preparacion",label:"Preparacionismo & SHTF"},{id:"surv_clima_extremo",label:"Climas Extremos"},{id:"surv_autodefensa",label:"Autodefensa & Seguridad"}]},
-];
+  {label:"🛡 OMEGA // SUPERVIVENCIA",color:"#ff8c00",categories:[{id:"surv_wilderness",label:"Supervivencia Wilderness"},{id:"surv_urbana",label:"Supervivencia Urbana"},{id:"surv_agua",label:"Obtención de Agua"},{id:"surv_fuego",label:"Fuego & Calor"},{id:"surv_refugio",label:"Construcción de Refugios"},{id:"surv_alimentacion",label:"Caza, Pesca & Forrajeo"},{id:"surv_primeros_auxilios_surv",label:"Primeros Auxilios Campo"},{id:"surv_navegacion",label:"Navegación & Orientación"},{id:"surv_señales",label:"Señales & Rescate"},{id:"surv_preparacion",label:"Preparacionismo & SHTF"},{id:"surv_clima_extremo",label:"Climas Extremos"},{id:"surv_autodefensa",label:"Autodefensa & Seguridad"}]}];
 
 
 // Everyday words people actually type, mapped to the category that solves them.
@@ -820,8 +818,7 @@ const LANGUAGES=[
   {code:"hi", label:"Hindi",      native:"हिन्दी",         voice:"hi-IN", flag:"🇮🇳"},
   {code:"zh", label:"Chino",      native:"中文",         voice:"zh-CN", flag:"🇨🇳"},
   {code:"ja", label:"Japonés",    native:"日本語",        voice:"ja-JP", flag:"🇯🇵"},
-  {code:"ko", label:"Coreano",    native:"한국어",        voice:"ko-KR", flag:"🇰🇷"},
-];
+  {code:"ko", label:"Coreano",    native:"한국어",        voice:"ko-KR", flag:"🇰🇷"}];
 
 const SYNONYMS={
   plomeria:["grifo","cañeria","tuberia","fuga","agua","desague","cisterna","wc","inodoro","atasco","sifon","fontaneria","gotea"],
@@ -850,6 +847,9 @@ const SYNONYMS={
   windows:["windows","microsoft","actualizar","registro","escritorio"],
   linux:["linux","ubuntu","terminal","bash","sudo","kernel"],
   programacion:["codigo","python","javascript","bug","funcion","programar","git"],
+  musica:["musica","instrumento","guitarra","piano","bateria musical","bajo","violin","afinar","acorde","partitura","solfeo","mezcla audio","grabar musica","estudio","microfono musica","altavoz monitor"],
+  fotografia:["foto","camara","objetivo","diafragma","obturador","iso","enfoque","retrato","paisaje","revelado","raw","tripode","flash"],
+  videojuegos:["videojuego","gameplay","unity","unreal","godot","motor grafico","pixel art","sprite","tileset","level design","mecanicas de juego","jugabilidad","npc","colisiones","shader","lowpoly","modelado personaje","rigging","rigging esqueleto","hud","partida guardada","multijugador","online","matchmaking","optimizar juego","fps","steam","itch","publicar juego","monetizacion","game jam","prototipo","narrativa interactiva","bso videojuego","testeo","bug juego","depurar","videoconsola","gamepad","pc gaming","retrogaming","emulador","modding"],
   cine_tv:["pelicula","film","cortometraje","guion","guionista","rodaje","rodar","camara cine","plano","secuencia","montaje","edicion video","postproduccion","iluminacion","foco","claqueta","storyboard","director","actor","actriz","reparto","casting","doblaje","subtitul","banda sonora","efectos especiales","vfx","croma","serie","episodio","temporada","documental","streaming","produccion","productora","festival","cine","television"],
   dep_futbol:["futbol","balon","porteria","portero","penalti","falta","regate","tactica futbol","once","liga","chut","cesped"],
   dep_baloncesto:["baloncesto","basket","canasta","tiro","triple","bote","rebote","mate","cancha"],
@@ -933,8 +933,7 @@ const FILM_RESOURCES=[
    when:["grabar","directo","streaming","captura","emision","pantalla"]},
   {label:"Creative Commons", url:"https://search.creativecommons.org/",
    what:"buscador de material reutilizable",
-   when:["licencia","derechos","copyright","permiso","atribucion","legal"]},
-];
+   when:["licencia","derechos","copyright","permiso","atribucion","legal"]}];
 
 // Picks the resources that actually match a step, best first, at most three.
 function filmResourcesFor(text){
@@ -1066,8 +1065,7 @@ function ColumnFrame({color,children,altarDelay=0}){
     [ 8, 16, 1.5, 0.7,  0.46],[30, 44, 2.2, 0.42, 0.34],
     [55, 26, 1.1, 1.0,  0.50],[74, 58, 1.8, 0.55, 0.32],
     [95, 36, 1.3, 0.85, 0.40],[18, 74, 2.6, 0.30, 0.26],
-    [62, 86, 1.6, 0.62, 0.28],[42, 98, 2.0, 0.38, 0.22],
-  ];
+    [62, 86, 1.6, 0.62, 0.28],[42, 98, 2.0, 0.38, 0.22]];
 
   // ---- Perspective helpers -------------------------------------------------
   // The temple is drawn as a shallow 3D box: a front row of columns, a recessed
@@ -2980,8 +2978,7 @@ function LoadingStages({color,category,note}){
     "Consultando conocimiento técnico",
     "Ordenando los pasos",
     "Añadiendo herramientas y avisos",
-    "Revisando la guía",
-  ];
+    "Revisando la guía"];
   const [i,setI]=React.useState(0);
   const [dots,setDots]=React.useState("");
   React.useEffect(()=>{
@@ -3224,8 +3221,7 @@ export default function Maestro(){
         item.category?.label,
         item.category?.sectionLabel,
         ...(item.guide?.pasos||[]).flatMap(p=>[p.titulo,p.descripcion]),
-        ...(item.guide?.herramientas||[]),
-      ].map(norm).join(" ");
+        ...(item.guide?.herramientas||[])].map(norm).join(" ");
       return hay.includes(nq);
     });
   },[history,histQuery,histFilter,favourites]);
@@ -3550,8 +3546,7 @@ export default function Maestro(){
       "Guía: "+(guide.titulo||""),
       guide.herramientas?.length?("Herramientas: "+guide.herramientas.join(", ")):"",
       "Pasos: "+(guide.pasos||[]).map((p,i)=>(i+1)+". "+p.titulo).join("; "),
-      guide.advertencia?("Advertencia: "+guide.advertencia):"",
-    ].filter(Boolean).join("\n");
+      guide.advertencia?("Advertencia: "+guide.advertencia):""].filter(Boolean).join("\n");
 
     const sys="Eres un experto en "+(selectedCategory?.label||"la materia")
       +". El usuario sigue una guía tuya y tiene una duda concreta. "
