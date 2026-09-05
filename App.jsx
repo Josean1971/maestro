@@ -2577,143 +2577,131 @@ function OrbitalHome({onSelect}){
     });
     stateRef.current={orbs};
 
-    // Central AI avatar — abstract geometric polyhedron
-    const drawAvatar=(cx,cy,t)=>{
-      const s=Math.min(W,H)*0.062*(1+Math.sin(t*0.8)*0.05);
-      // Outer glow
-      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,s*2.4);
-      g.addColorStop(0,"rgba(0,207,255,0.18)");
-      g.addColorStop(1,"transparent");
-      ctx.beginPath();ctx.arc(cx,cy,s*2.4,0,Math.PI*2);
-      ctx.fillStyle=g;ctx.fill();
-      // Counter-rotating rings
-      [[1.55,0.45,"rgba(0,207,255,0.32)"],[1.15,-0.75,"rgba(199,125,255,0.28)"]].forEach(([rr,sp,col],ri)=>{
-        ctx.save();ctx.translate(cx,cy);ctx.rotate(t*sp);
-        ctx.beginPath();ctx.arc(0,0,s*rr,0,Math.PI*2);
-        ctx.strokeStyle=col;ctx.lineWidth=1.5;
-        ctx.setLineDash([6,5]);ctx.stroke();ctx.setLineDash([]);
-        if(ri===0){
-          ctx.fillStyle="rgba(0,207,255,0.7)";
-          for(let i=0;i<6;i++){
-            const a=(i/6)*Math.PI*2;
-            ctx.beginPath();ctx.arc(Math.cos(a)*s*rr,Math.sin(a)*s*rr,2,0,Math.PI*2);ctx.fill();
-          }
-        }
-        ctx.restore();
-      });
-      // Central polyhedron
-      ctx.save();ctx.translate(cx,cy);
-      const rot=t*0.6;
-      const pts=Array.from({length:6},(_,i)=>{
-        const a=(i/6)*Math.PI*2+rot;
-        const r=i%2===0?s:s*0.55;
-        return[Math.cos(a)*r,Math.sin(a)*r];
-      });
-      const sg=ctx.createRadialGradient(0,0,0,0,0,s);
-      sg.addColorStop(0,"rgba(0,207,255,0.95)");
-      sg.addColorStop(0.5,"rgba(100,50,255,0.65)");
-      sg.addColorStop(1,"rgba(0,207,255,0.12)");
-      ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
-      pts.forEach(p=>ctx.lineTo(p[0],p[1]));ctx.closePath();
-      ctx.fillStyle=sg;ctx.fill();
-      ctx.strokeStyle="rgba(0,207,255,0.9)";ctx.lineWidth=1.5;ctx.stroke();
-      ctx.strokeStyle="rgba(199,125,255,"+(0.18+Math.sin(t)*0.06)+")";ctx.lineWidth=0.7;
-      for(let i=0;i<6;i+=2){
-        ctx.beginPath();ctx.moveTo(0,0);
-        ctx.lineTo(pts[i][0],pts[i][1]);
-        ctx.lineTo(pts[(i+1)%6][0],pts[(i+1)%6][1]);
-        ctx.closePath();ctx.stroke();
-      }
-      ctx.beginPath();ctx.arc(0,0,s*0.1,0,Math.PI*2);
-      ctx.fillStyle="white";ctx.fill();
-      ctx.restore();
-    };
+    // The oracle is drawn into the canvas rather than layered over it, so the
+    // painter's algorithm can put the far orbs behind him and the near ones in
+    // front - which is what makes the spheres look like they orbit the figure
+    // instead of merely passing over a picture of him.
+    const oracleImg=new Image();
+    let oracleReady=false;
+    oracleImg.onload=()=>{oracleReady=true;};
+    oracleImg.src=ORACLE_IMG;
 
-    // Draw a shaded 3D sphere with specular highlight and terminator
+    // Draws one category orb: a lit 3D sphere with its icon and label. This is
+    // the function the painter's algorithm calls for each half of the orbit.
     const drawSphere3D=(o,t)=>{
       const r=o.size*o.scale;
       if(r<1) return;
-      const lx=-0.42, ly=-0.42;  // light direction
+      const alpha=Math.min(1,0.35+o.depth*0.5);
+      const col=o.color||"#00cfff";
+      const hex=(v)=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0");
 
-      // Ambient glow behind (stronger when closer)
-      if(o.hovered||o.depth>1.15){
-        const gl=ctx.createRadialGradient(o.x,o.y,r*0.6,o.x,o.y,r*2.4);
-        gl.addColorStop(0,o.color+(o.hovered?"55":"28"));
-        gl.addColorStop(1,"transparent");
-        ctx.beginPath();ctx.arc(o.x,o.y,r*2.4,0,Math.PI*2);
-        ctx.fillStyle=gl;ctx.fill();
-      }
-
-      // Main sphere body — offset radial gradient creates the 3D lit look
-      const g=ctx.createRadialGradient(
-        o.x+lx*r*0.55, o.y+ly*r*0.55, r*0.05,
-        o.x, o.y, r*1.05
-      );
-      g.addColorStop(0,   "rgba(255,255,255,0.92)");
-      g.addColorStop(0.18, o.color+"ee");
-      g.addColorStop(0.55, o.color+"bb");
-      g.addColorStop(0.82, o.color+"55");
-      g.addColorStop(1,   "rgba(0,0,0,0.55)");
-      ctx.beginPath();ctx.arc(o.x,o.y,r,0,Math.PI*2);
-      ctx.fillStyle=g;ctx.fill();
-
-      // Terminator shadow — dark crescent on the unlit side
-      const sh=ctx.createRadialGradient(
-        o.x-lx*r*0.75, o.y-ly*r*0.75, r*0.1,
-        o.x, o.y, r*1.1
-      );
-      sh.addColorStop(0,"rgba(0,0,0,0.42)");
-      sh.addColorStop(0.7,"rgba(0,0,0,0.08)");
-      sh.addColorStop(1,"transparent");
-      ctx.beginPath();ctx.arc(o.x,o.y,r,0,Math.PI*2);
-      ctx.fillStyle=sh;ctx.fill();
-
-      // Rim light — thin bright edge on the far side
-      ctx.beginPath();
-      ctx.arc(o.x,o.y,r*0.97,Math.PI*0.15,Math.PI*1.15);
-      ctx.strokeStyle="rgba(255,255,255,"+(0.25*o.depth)+")";
-      ctx.lineWidth=Math.max(0.8,r*0.06);ctx.stroke();
-
-      // Specular highlight — small bright spot
-      const sp=ctx.createRadialGradient(
-        o.x+lx*r*0.5, o.y+ly*r*0.5, 0,
-        o.x+lx*r*0.5, o.y+ly*r*0.5, r*0.32
-      );
-      sp.addColorStop(0,"rgba(255,255,255,0.85)");
-      sp.addColorStop(1,"transparent");
-      ctx.beginPath();
-      ctx.arc(o.x+lx*r*0.5,o.y+ly*r*0.5,r*0.32,0,Math.PI*2);
-      ctx.fillStyle=sp;ctx.fill();
-
-      // Outline
-      ctx.beginPath();ctx.arc(o.x,o.y,r,0,Math.PI*2);
-      ctx.strokeStyle=o.color+(o.hovered?"ff":"77");
-      ctx.lineWidth=o.hovered?2:1;ctx.stroke();
-
-      // Icon — scaled and faded by depth
       ctx.save();
-      ctx.globalAlpha=Math.min(1,0.45+o.depth*0.45);
-      ctx.font=((r*0.72)|0)+"px sans-serif";
-      ctx.textAlign="center";ctx.textBaseline="middle";
-      ctx.fillText(o.icon,o.x,o.y-r*0.04);
+      ctx.translate(o.x,o.y);
+
+      // Outer glow, stronger when hovered
+      const glow=ctx.createRadialGradient(0,0,r*0.6,0,0,r*2.3);
+      glow.addColorStop(0,col+hex((o.hovered?110:70)*alpha));
+      glow.addColorStop(0.4,col+hex(30*alpha));
+      glow.addColorStop(1,"transparent");
+      ctx.beginPath();ctx.arc(0,0,r*2.3,0,Math.PI*2);
+      ctx.fillStyle=glow;ctx.fill();
+
+      // The sphere body, lit from the upper left
+      const body=ctx.createRadialGradient(-r*0.3,-r*0.32,r*0.05,0,0,r);
+      body.addColorStop(0,   "rgba(255,255,255,"+(0.85*alpha)+")");
+      body.addColorStop(0.22,col+hex(245*alpha));
+      body.addColorStop(0.62,col+hex(175*alpha));
+      body.addColorStop(1,   "rgba(0,0,0,"+(0.45*alpha)+")");
+      ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);
+      ctx.fillStyle=body;ctx.fill();
+
+      // Rim light, which is what reads as curvature
+      ctx.beginPath();ctx.arc(0,0,r*0.98,0,Math.PI*2);
+      ctx.strokeStyle="rgba(255,255,255,"+(0.35*alpha)+")";
+      ctx.lineWidth=Math.max(0.7,r*0.06);
+      ctx.stroke();
+
+      // Specular highlight
+      ctx.beginPath();
+      ctx.ellipse(-r*0.32,-r*0.34,r*0.24,r*0.16,-0.6,0,Math.PI*2);
+      ctx.fillStyle="rgba(255,255,255,"+(0.5*alpha)+")";
+      ctx.fill();
+
       ctx.restore();
 
-      // Label — only for front-facing orbs
-      if(o.depth>0.85){
+      // The section emblem. These top-level orbs carry an emoji rather than a
+      // vector icon, so it is drawn as text centred on the sphere.
+      if(o.icon&&r>8){
         ctx.save();
-        ctx.globalAlpha=Math.min(1,(o.depth-0.85)*3.5);
-        ctx.font="bold "+Math.max(7,(r*0.30)|0)+"px monospace";
-        ctx.fillStyle=o.hovered?"#fff":o.color;
-        ctx.shadowColor="rgba(0,0,0,0.8)";ctx.shadowBlur=4;
-        ctx.textAlign="center";ctx.textBaseline="top";
-        drawWrappedLabel(ctx,o.label,o.x,o.y+r+4,W,Math.max(70,r*4.5));
+        ctx.font=Math.round(r*0.92)+"px serif";
+        ctx.textAlign="center";
+        ctx.textBaseline="middle";
+        ctx.globalAlpha=alpha;
+        ctx.fillText(o.icon,o.x,o.y+r*0.04);
+        ctx.restore();
+      }
+
+      // Label beneath, only for orbs near enough to read
+      if(o.depth>0.85&&r>10){
+        ctx.save();
+        ctx.font="bold "+Math.max(9,Math.round(r*0.40))+"px monospace";
+        ctx.textAlign="center";
+        ctx.textBaseline="top";
+        const label=(o.label||"").replace(/^[^\w\sÁÉÍÓÚÜÑáéíóúüñ]+\s*/,"");
+        ctx.shadowColor="rgba(0,0,0,0.9)";
+        ctx.shadowBlur=6;
+        ctx.fillStyle=o.hovered?"#ffffff":col;
+        ctx.globalAlpha=Math.min(1,(o.depth-0.85)*3.2);
+        ctx.fillText(label,o.x,o.y+r*1.35);
         ctx.restore();
       }
     };
 
-    let t=0;
-    let lastTime=performance.now();
-    let lastFrame=0;
+    // Central avatar: the oracle himself, with the halo that seats him in the
+    // scene. Falls back to a glowing core until the image has decoded.
+    const drawAvatar=(cx,cy,t)=>{
+      const breathe=1+Math.sin(t*0.8)*0.035;
+      const bob=Math.sin(t*0.9)*6;
+      const R=Math.min(W,H)*0.30;              // sits inside the orbit radius
+
+      // Halo behind him
+      const g=ctx.createRadialGradient(cx,cy+bob,0,cx,cy+bob,R*0.95);
+      g.addColorStop(0,"rgba(0,207,255,0.22)");
+      g.addColorStop(0.42,"rgba(0,140,220,0.10)");
+      g.addColorStop(1,"rgba(0,120,200,0)");
+      ctx.beginPath();
+      ctx.arc(cx,cy+bob,R*0.95,0,Math.PI*2);
+      ctx.fillStyle=g;
+      ctx.globalAlpha=0.72+Math.sin(t*1.3)*0.16;
+      ctx.fill();
+      ctx.globalAlpha=1;
+
+      if(oracleReady){
+        const w=R*1.42*breathe;
+        const h=w*(oracleImg.height/oracleImg.width);
+        ctx.save();
+        ctx.shadowColor="rgba(0,180,255,0.55)";
+        ctx.shadowBlur=26;
+        ctx.globalAlpha=0.97;
+        ctx.drawImage(oracleImg,cx-w/2,cy+bob-h/2,w,h);
+        ctx.restore();
+      }else{
+        // Placeholder while decoding, so the centre is never empty
+        const s2=R*0.24;
+        ctx.beginPath();
+        ctx.arc(cx,cy+bob,s2,0,Math.PI*2);
+        const c=ctx.createRadialGradient(cx,cy+bob,0,cx,cy+bob,s2);
+        c.addColorStop(0,"rgba(255,255,255,0.9)");
+        c.addColorStop(1,"rgba(0,180,255,0.15)");
+        ctx.fillStyle=c; ctx.fill();
+      }
+    };
+
+    // Frame clock. These were lost when the avatar block was replaced, and the
+    // loop referenced them on its very first frame - which threw before
+    // anything was drawn, leaving the canvas blank.
+    let t=0, lastTime=performance.now(), lastFrame=0;
+
     const loop=(now)=>{
       rafRef.current=requestAnimationFrame(loop);
       // Cap at ~30fps to leave CPU headroom for the audio scheduler
@@ -2835,24 +2823,6 @@ function OrbitalHome({onSelect}){
     <div style={{position:"relative",width:"100%",height:"calc(100vh - 150px)",minHeight:340}}>
       <p style={{fontFamily:"monospace",fontSize:10,color:"#444",letterSpacing:"0.15em",textAlign:"center",paddingTop:6}}>// TOCA UNA ESFERA PARA EXPLORAR</p>
       <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 24px)",cursor:"pointer",touchAction:"pan-y",display:"block"}}/>
-
-      {/* The oracle at the heart of the sphere. It sits behind the orbs and
-          ignores pointer events, so tapping a category still works exactly as
-          before - the figure is scenery, not a control. */}
-      <div aria-hidden style={{position:"absolute",left:"50%",top:"calc(50% + 12px)",
-                               transform:"translate(-50%,-50%)",pointerEvents:"none",
-                               zIndex:1,width:"min(38vw, 210px)",
-                               animation:"oracleFloat 7s ease-in-out infinite"}}>
-        {/* Halo, so the figure sits in the scene rather than on top of it. */}
-        <div style={{position:"absolute",left:"50%",top:"52%",transform:"translate(-50%,-50%)",
-                     width:"170%",height:"170%",borderRadius:"50%",
-                     background:"radial-gradient(circle, rgba(0,207,255,0.20) 0%, rgba(0,140,220,0.10) 38%, transparent 68%)",
-                     animation:"oraclePulse 4.5s ease-in-out infinite"}}/>
-        <img src={ORACLE_IMG} alt=""
-             style={{position:"relative",width:"100%",height:"auto",display:"block",
-                     filter:"drop-shadow(0 0 22px rgba(0,180,255,0.45))",
-                     opacity:0.96}}/>
-      </div>
 
       <ViewPad onNudge={view.nudge} onToggle={view.toggleSpin} onReset={view.reset}
                spinning={view.ui.spin}/>
