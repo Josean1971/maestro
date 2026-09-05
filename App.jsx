@@ -486,43 +486,75 @@ function useSpeech() {
 
   const speak = React.useCallback((text,langTag) => {
     const synth = window.speechSynthesis;
-    if (!synth) return;
-    synth.cancel();
+    if (!synth) { alert("Este navegador no puede leer en voz alta."); return; }
 
     const parts = splitForSpeech(text);
     if (!parts.length) return;
     const lang = langTag || "es-ES";
-    const voice = pickVoice(lang);
 
-    setSpeaking(true);
-    // Heavy canvas work starves the speech engine on low-end devices, so the
-    // animations are asked to idle while the guide is being read aloud.
-    try { window.__maestroSpeaking = true; } catch(e) {}
+    // Android leaves the engine wedged if speak() follows cancel() in the same
+    // tick, and it also reports paused after a cancel. Clearing, resuming and
+    // then queueing on the next tick is what makes it reliable there.
+    synth.cancel();
+    if (synth.paused) { try { synth.resume(); } catch(e) {} }
 
-    parts.forEach((part, idx) => {
-      const utt = new SpeechSynthesisUtterance(part);
-      utt.lang = lang;
-      utt.rate = voicePref.rate || 1.0;
-      utt.pitch = 1.0;
-      utt.volume = 1.0;
-      if (voice) utt.voice = voice;
-      if (idx === parts.length - 1) {
-        utt.onend = () => {
+    const fire = () => {
+      const voice = pickVoice(lang);
+      // If the device has no voice at all for this language, speaking with an
+      // unknown lang tag produces silence. Falling back to the system default
+      // at least reads the text.
+      const useLang = voice ? lang : (pickVoice("es-ES") ? "es-ES" : undefined);
+
+      setSpeaking(true);
+      // Heavy canvas work starves the speech engine on low-end devices, so the
+      // animations are asked to idle while the guide is being read aloud.
+      try { window.__maestroSpeaking = true; } catch(e) {}
+
+      parts.forEach((part, idx) => {
+        const utt = new SpeechSynthesisUtterance(part);
+        if (useLang) utt.lang = useLang;
+        utt.rate = voicePref.rate || 1.0;
+        utt.pitch = 1.0;
+        utt.volume = 1.0;
+        if (voice) utt.voice = voice;
+        if (idx === parts.length - 1) {
+          utt.onend = () => {
+            setSpeaking(false);
+            try { window.__maestroSpeaking = false; } catch(e) {}
+          };
+        }
+        utt.onerror = (ev) => {
           setSpeaking(false);
           try { window.__maestroSpeaking = false; } catch(e) {}
+          // "interrupted" and "canceled" are normal when the user stops it.
+          const why = ev && ev.error;
+          if (why && why !== "interrupted" && why !== "canceled") {
+            try { window.__maestroVoiceError = why; } catch(e) {}
+          }
         };
-      }
-      utt.onerror = () => {
-        setSpeaking(false);
-        try { window.__maestroSpeaking = false; } catch(e) {}
-      };
-      // Queue everything up front: the engine chains the pieces itself, which
-      // removes the pause a per-piece callback would introduce.
-      synth.speak(utt);
-    });
+        synth.speak(utt);
+      });
 
-    // No pause/resume keep-alive here: that trick fixes desktop Chrome but on
-    // Android it interrupts playback, which is worse than the problem.
+      // Nothing was accepted: usually the engine is still waking up, or the
+      // device has no speech data installed at all.
+      setTimeout(() => {
+        if (!synth.speaking && !synth.pending) {
+          setSpeaking(false);
+          try { window.__maestroSpeaking = false; } catch(e) {}
+        }
+      }, 900);
+    };
+
+    // Voices arrive asynchronously on Android; speaking before they load picks
+    // no voice and can fall silent. Wait briefly for them the first time.
+    if (synth.getVoices().length === 0) {
+      let done = false;
+      const go = () => { if (!done) { done = true; fire(); } };
+      try { synth.onvoiceschanged = go; } catch(e) {}
+      setTimeout(go, 350);          // and go anyway if the event never fires
+    } else {
+      setTimeout(fire, 60);          // let cancel() settle first
+    }
   }, [pickVoice, splitForSpeech, voicePref]);
 
   const stopSpeaking = React.useCallback(() => {
