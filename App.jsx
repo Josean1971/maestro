@@ -1002,6 +1002,54 @@ function filmResourcesFor(text){
 const ALL_CATS=SECTIONS.flatMap(s=>s.categories.map(c=>({...c,sectionColor:s.color,sectionLabel:s.label})));
 
 // ── COLUMN FRAME WITH FLOATING CLOUDS ──
+
+// Positions measured from the photograph itself: the warm pixels cluster at
+// these points, which are the brazier bowls. Percentages of the image box, so
+// they track it at any size.
+const TEMPLE_TORCHES=[
+  {x: 7.2, y:67.9, s:1.00},
+  {x:10.4, y:76.9, s:0.74},
+  {x:17.7, y:68.1, s:0.62},
+  {x:23.6, y:72.0, s:0.86},
+  {x:76.6, y:72.5, s:0.86},
+  {x:82.4, y:68.4, s:0.62},
+  {x:89.6, y:76.6, s:0.74},
+  {x:92.6, y:68.7, s:1.00},
+];
+
+// A single brazier flame. The image already has a static fire painted in, so
+// this sits on top in screen blend mode and only adds the movement: a licking
+// tongue of light and a halo that breathes. Trying to cover the painted flame
+// would look worse than letting the two merge.
+function TempleFlame({x,y,s,color}){
+  return(
+    <div aria-hidden style={{position:"absolute",left:x+"%",top:y+"%",
+                             transform:"translate(-50%,-64%)",pointerEvents:"none",
+                             width:(4.6*s)+"%",aspectRatio:"1 / 1.55",
+                             mixBlendMode:"screen"}}>
+      {/* halo */}
+      <div style={{position:"absolute",left:"50%",top:"58%",transform:"translate(-50%,-50%)",
+                   width:"320%",height:"250%",borderRadius:"50%",
+                   background:"radial-gradient(circle, rgba(255,168,60,0.30) 0%, rgba(255,120,20,0.14) 40%, transparent 72%)",
+                   animation:`flameGlow ${(1.7+s*0.6).toFixed(2)}s ease-in-out infinite`,
+                   animationDelay:`${(x*0.037).toFixed(2)}s`}}/>
+      {/* the tongue of flame */}
+      <div style={{position:"absolute",inset:0,
+                   background:"radial-gradient(ellipse 52% 62% at 50% 72%, rgba(255,238,190,0.95) 0%, rgba(255,176,64,0.72) 32%, rgba(233,110,18,0.34) 60%, transparent 82%)",
+                   borderRadius:"50% 50% 46% 46% / 62% 62% 38% 38%",
+                   transformOrigin:"50% 88%",
+                   animation:`flameDance ${(0.9+s*0.35).toFixed(2)}s ease-in-out infinite`,
+                   animationDelay:`${(y*0.021).toFixed(2)}s`}}/>
+      {/* bright core */}
+      <div style={{position:"absolute",left:"50%",bottom:"6%",transform:"translateX(-50%)",
+                   width:"46%",height:"46%",borderRadius:"50%",
+                   background:"radial-gradient(circle, rgba(255,250,225,0.9) 0%, rgba(255,196,96,0.45) 55%, transparent 80%)",
+                   animation:`flameCore ${(0.7+s*0.28).toFixed(2)}s ease-in-out infinite`,
+                   animationDelay:`${(x*0.019).toFixed(2)}s`}}/>
+    </div>
+  );
+}
+
 function ColumnFrame({color,children,altarDelay=0}){
   const shakeRef=React.useRef(null);
 
@@ -1037,6 +1085,11 @@ function ColumnFrame({color,children,altarDelay=0}){
                                 willChange:"transform",lineHeight:0}}>
       <img src={TEMPLE_IMG} alt=""
            style={{width:"100%",height:"auto",display:"block",borderRadius:4}}/>
+
+      {/* Living fire over the painted braziers. */}
+      {TEMPLE_TORCHES.map((tc,i)=>(
+        <TempleFlame key={i} x={tc.x} y={tc.y} s={tc.s} color={color}/>
+      ))}
 
       {/* A wash of the category colour, so the sanctuary picks up the hue of
           whatever knowledge is being consulted. */}
@@ -4272,6 +4325,9 @@ export default function Maestro(){
         @keyframes fadeIn{from{opacity:0;transform:translateY(16px) scale(.985);}to{opacity:1;transform:translateY(0) scale(1);}}
         @keyframes spin{to{transform:rotate(360deg);}}
         @keyframes pulseSoft{0%,100%{opacity:.55;transform:scale(1);}50%{opacity:1;transform:scale(1.14);}}
+        @keyframes flameDance{0%,100%{transform:scaleY(1) scaleX(1) skewX(0deg);opacity:.92;}22%{transform:scaleY(1.14) scaleX(.93) skewX(-3.5deg);opacity:1;}46%{transform:scaleY(.94) scaleX(1.06) skewX(2.8deg);opacity:.86;}71%{transform:scaleY(1.09) scaleX(.96) skewX(-1.8deg);opacity:.97;}}
+        @keyframes flameGlow{0%,100%{opacity:.62;transform:translate(-50%,-50%) scale(1);}38%{opacity:1;transform:translate(-50%,-50%) scale(1.16);}64%{opacity:.78;transform:translate(-50%,-50%) scale(1.05);}}
+        @keyframes flameCore{0%,100%{opacity:.75;transform:translateX(-50%) scale(1);}40%{opacity:1;transform:translateX(-50%) scale(1.18);}}
         @keyframes oracleFloat{0%,100%{transform:translate(-50%,-50%) translateY(0);}50%{transform:translate(-50%,-50%) translateY(-9px);}}
         @keyframes oraclePulse{0%,100%{opacity:.55;transform:translate(-50%,-50%) scale(1);}50%{opacity:1;transform:translate(-50%,-50%) scale(1.07);}}
         @keyframes scan{0%,100%{opacity:0;transform:translateX(-100%);}50%{opacity:1;transform:translateX(100%);}}
