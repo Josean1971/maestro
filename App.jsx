@@ -2241,15 +2241,26 @@ function StarField({section,color,icon,label,onBack,onSelect}){
     };
     const resize=()=>{const d=pixelRatio();W=canvas.offsetWidth;H=canvas.offsetHeight;canvas.width=W*d;canvas.height=H*d;ctx.setTransform(1,0,0,1,0,0);ctx.scale(d,d);};
     window.addEventListener("resize",resize);
+    // Watches the element itself, catching the container changes that a window
+    // resize event misses.
+    let ro=null;
+    if(typeof ResizeObserver!=="undefined"){
+      ro=new ResizeObserver(()=>{
+        // Only act on a real change, or every layout tick would rebuild the
+        // bitmap and clear the canvas.
+        if(canvas.offsetWidth!==W||canvas.offsetHeight!==H) resize();
+      });
+      ro.observe(canvas);
+    }
     canvas.addEventListener("mousemove",onMove);
     canvas.addEventListener("click",onTap);
     canvas.addEventListener("touchend",onTap);
     const detachView=view.attach(canvas);
-    return()=>{cancelAnimationFrame(rafRef.current);window.removeEventListener("resize",resize);detachView&&detachView();};
+    return()=>{cancelAnimationFrame(rafRef.current);window.removeEventListener("resize",resize);if(ro) ro.disconnect();detachView&&detachView();};
   },[section,color,icon]);
 
   return(
-    <div style={{position:"relative",width:"100%",height:"calc(100vh - 150px)",minHeight:340,animation:"fadeIn .45s var(--ease-out) both"}}>
+    <div className="maestro-viewport" style={{position:"relative",width:"100%",minHeight:340,animation:"fadeIn .45s var(--ease-out) both"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"4px 4px 0"}}>
         <button onClick={onBack} style={{background:"rgba(0,8,20,0.8)",border:"1px solid "+color+"44",color:color,padding:"5px 12px",borderRadius:4,cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>← VOLVER</button>
         <span style={{fontFamily:"monospace",fontSize:12,color:color,textShadow:"0 0 8px "+color,letterSpacing:"0.1em"}}>{icon} {label}</span>
@@ -2527,13 +2538,26 @@ function OrbitalHome({onSelect}){
       ctx.scale(d,d);
     };
     window.addEventListener("resize",resize);
+    // Watches the element itself, catching the container changes that a window
+    // resize event misses.
+    let ro=null;
+    if(typeof ResizeObserver!=="undefined"){
+      ro=new ResizeObserver(()=>{
+        // Only act on a real change, or every layout tick would rebuild the
+        // bitmap and clear the canvas.
+        if(canvas.offsetWidth!==W||canvas.offsetHeight!==H) resize();
+      });
+      ro.observe(canvas);
+    }
     canvas.addEventListener("mousemove",onMove);
     canvas.addEventListener("click",onTap);
     canvas.addEventListener("touchend",onTap);
     const detachView=view.attach(canvas);
     return()=>{
       cancelAnimationFrame(rafRef.current);
-      window.removeEventListener("resize",resize);detachView&&detachView();
+      window.removeEventListener("resize",resize);
+      if(ro) ro.disconnect();
+      detachView&&detachView();
       canvas.removeEventListener("mousemove",onMove);
       canvas.removeEventListener("touchmove",onMove);
       canvas.removeEventListener("click",onTap);
@@ -2548,7 +2572,7 @@ function OrbitalHome({onSelect}){
   );
 
   return(
-    <div style={{position:"relative",width:"100%",height:"calc(100vh - 150px)",minHeight:340}}>
+    <div className="maestro-viewport" style={{position:"relative",width:"100%",minHeight:340}}>
       <p style={{fontFamily:"monospace",fontSize:10,color:"#444",letterSpacing:"0.15em",textAlign:"center",paddingTop:6}}>// TOCA UNA ESFERA PARA EXPLORAR</p>
       <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 24px)",cursor:"pointer",touchAction:"pan-y",display:"block"}}/>
 
@@ -3884,8 +3908,8 @@ export default function Maestro(){
         )}
 
         {screen==="describe"&&(
-          <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",
-                       minHeight:"calc(100vh - 150px)",
+          <div className="maestro-tall"
+               style={{display:"flex",flexDirection:"column",justifyContent:"flex-end",
                        animation:enteredByStar?"templeRise 5.4s cubic-bezier(.16,.85,.28,1) both":"fadeIn 0.35s ease"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
               <div style={{width:46,height:46,filter:`drop-shadow(0 0 10px ${accentColor})`}}>
@@ -4325,6 +4349,8 @@ export default function Maestro(){
         @keyframes fadeIn{from{opacity:0;transform:translateY(16px) scale(.985);}to{opacity:1;transform:translateY(0) scale(1);}}
         @keyframes spin{to{transform:rotate(360deg);}}
         @keyframes pulseSoft{0%,100%{opacity:.55;transform:scale(1);}50%{opacity:1;transform:scale(1.14);}}
+        .maestro-viewport{height:calc(100vh - 150px);height:calc(100dvh - 150px);}
+        .maestro-tall{min-height:calc(100vh - 150px);min-height:calc(100dvh - 150px);}
         @keyframes flameDance{0%,100%{transform:scaleY(1) scaleX(1) skewX(0deg);opacity:.92;}22%{transform:scaleY(1.14) scaleX(.93) skewX(-3.5deg);opacity:1;}46%{transform:scaleY(.94) scaleX(1.06) skewX(2.8deg);opacity:.86;}71%{transform:scaleY(1.09) scaleX(.96) skewX(-1.8deg);opacity:.97;}}
         @keyframes flameGlow{0%,100%{opacity:.62;transform:translate(-50%,-50%) scale(1);}38%{opacity:1;transform:translate(-50%,-50%) scale(1.16);}64%{opacity:.78;transform:translate(-50%,-50%) scale(1.05);}}
         @keyframes flameCore{0%,100%{opacity:.75;transform:translateX(-50%) scale(1);}40%{opacity:1;transform:translateX(-50%) scale(1.18);}}
