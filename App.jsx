@@ -840,6 +840,87 @@ const VOICE_SAMPLE={
   ko:"이것은 가이드를 읽어 줄 목소리입니다. 1단계: 잘 들리는지 확인하세요.",
 };
 
+
+// ---------------------------------------------------------------------------
+// Interface strings. Only the essentials are translated: the buttons, prompts
+// and messages a person meets on the way to a guide. Category names stay in
+// Spanish, since translating 152 of them would have to be maintained for ever
+// and the icons carry most of the meaning anyway.
+//
+// Anything missing from a language simply falls back to Spanish, so a partial
+// translation is safe.
+// ---------------------------------------------------------------------------
+const UI_TEXT={
+  es:{
+    tagline:"Toca una esfera para explorar",
+    describe:"Describe tu problema",
+    placeholder:"Describe el problema...",
+    generate:"Generar guía",
+    generating:"Consultando…",
+    attachPhoto:"adjunta una foto",
+    preparing:"preparando…",
+    photos:"fotos",
+    dictate:"Dictar",
+    takePhoto:"Hacer una foto",
+    fromGallery:"Elegir de la galería",
+    language:"Idioma",
+    level:"Nivel",
+    basic:"Básico", normal:"Normal", expert:"Experto",
+    history:"Historial",
+    home:"Inicio",
+    settings:"Ajustes",
+    searchGuides:"Buscar en tus guías...",
+    noHistory:"Sin historial aún.",
+    all:"Todas", favourites:"Favoritas",
+    results:"resultados",
+    tools:"Herramientas",
+    warning:"Advertencia",
+    callPro:"Cuándo llamar a un profesional",
+    step:"Paso",
+    tip:"Consejo",
+    difficulty:"Dificultad",
+    time:"Tiempo",
+    done:"Has completado todos los pasos.",
+    solveAnother:"Resolver otro",
+    read:"Leer en voz alta",
+    stop:"Detener",
+    share:"Compartir",
+    copy:"Copiar",
+    pdf:"PDF",
+    askTitle:"¿Alguna duda?",
+    askSub:"Pregunta lo que necesites sobre esta guía",
+    askPlaceholder:"Escribe tu duda...",
+    ask:"Preguntar",
+    asking:"Consultando…",
+    failed:"No se pudo generar la guía.",
+    retry:"Reintentar",
+    edit:"Editar",
+    setKey:"Configurar mi clave",
+    offline:"Sin conexión · puedes consultar tus guías guardadas",
+    quickAccess:"Acceso rápido",
+    unfinished:"sin terminar",
+    delete:"Borrar del historial",
+    confirmDelete:"¿Borrar esta guía del historial?",
+    completed:"completada",
+  },
+  en:{tagline:"Tap a sphere to explore",describe:"Describe your problem",placeholder:"Describe the problem...",generate:"Generate guide",generating:"Working…",attachPhoto:"attach a photo",preparing:"preparing…",photos:"photos",dictate:"Dictate",takePhoto:"Take a photo",fromGallery:"Choose from gallery",language:"Language",level:"Level",basic:"Basic",normal:"Normal",expert:"Expert",history:"History",home:"Home",settings:"Settings",searchGuides:"Search your guides...",noHistory:"No history yet.",all:"All",favourites:"Favourites",results:"results",tools:"Tools",warning:"Warning",callPro:"When to call a professional",step:"Step",tip:"Tip",difficulty:"Difficulty",time:"Time",done:"You have completed every step.",solveAnother:"Solve another",read:"Read aloud",stop:"Stop",share:"Share",copy:"Copy",pdf:"PDF",askTitle:"Any questions?",askSub:"Ask anything about this guide",askPlaceholder:"Type your question...",ask:"Ask",asking:"Working…",failed:"The guide could not be generated.",retry:"Retry",edit:"Edit",setKey:"Set up my key",offline:"Offline · your saved guides are still available",quickAccess:"Quick access",unfinished:"unfinished",delete:"Delete from history",confirmDelete:"Delete this guide from your history?",completed:"completed"},
+  fr:{tagline:"Touchez une sphère pour explorer",describe:"Décrivez votre problème",placeholder:"Décrivez le problème...",generate:"Générer le guide",generating:"En cours…",attachPhoto:"joindre une photo",preparing:"préparation…",photos:"photos",dictate:"Dicter",takePhoto:"Prendre une photo",fromGallery:"Choisir dans la galerie",language:"Langue",level:"Niveau",basic:"Simple",normal:"Normal",expert:"Expert",history:"Historique",home:"Accueil",settings:"Réglages",searchGuides:"Rechercher dans vos guides...",noHistory:"Aucun historique.",all:"Tous",favourites:"Favoris",results:"résultats",tools:"Outils",warning:"Avertissement",callPro:"Quand appeler un professionnel",step:"Étape",tip:"Conseil",difficulty:"Difficulté",time:"Durée",done:"Vous avez terminé toutes les étapes.",solveAnother:"Résoudre autre chose",read:"Lire à voix haute",stop:"Arrêter",share:"Partager",copy:"Copier",pdf:"PDF",askTitle:"Des questions ?",askSub:"Demandez ce que vous voulez sur ce guide",askPlaceholder:"Écrivez votre question...",ask:"Demander",asking:"En cours…",failed:"Le guide n'a pas pu être généré.",retry:"Réessayer",edit:"Modifier",setKey:"Configurer ma clé",offline:"Hors ligne · vos guides enregistrés restent accessibles",quickAccess:"Accès rapide",unfinished:"non terminés",delete:"Supprimer de l'historique",confirmDelete:"Supprimer ce guide de l'historique ?",completed:"terminé"},
+  de:{tagline:"Tippen Sie auf eine Sphäre",describe:"Beschreiben Sie Ihr Problem",placeholder:"Problem beschreiben...",generate:"Anleitung erstellen",generating:"Läuft…",attachPhoto:"Foto anhängen",preparing:"wird vorbereitet…",photos:"Fotos",dictate:"Diktieren",takePhoto:"Foto aufnehmen",fromGallery:"Aus der Galerie",language:"Sprache",level:"Niveau",basic:"Einfach",normal:"Normal",expert:"Experte",history:"Verlauf",home:"Start",settings:"Einstellungen",searchGuides:"In Ihren Anleitungen suchen...",noHistory:"Noch kein Verlauf.",all:"Alle",favourites:"Favoriten",results:"Ergebnisse",tools:"Werkzeuge",warning:"Warnung",callPro:"Wann eine Fachkraft rufen",step:"Schritt",tip:"Tipp",difficulty:"Schwierigkeit",time:"Dauer",done:"Sie haben alle Schritte abgeschlossen.",solveAnother:"Etwas anderes lösen",read:"Vorlesen",stop:"Stopp",share:"Teilen",copy:"Kopieren",pdf:"PDF",askTitle:"Noch Fragen?",askSub:"Fragen Sie alles zu dieser Anleitung",askPlaceholder:"Ihre Frage...",ask:"Fragen",asking:"Läuft…",failed:"Die Anleitung konnte nicht erstellt werden.",retry:"Erneut versuchen",edit:"Bearbeiten",setKey:"Schlüssel einrichten",offline:"Offline · gespeicherte Anleitungen bleiben verfügbar",quickAccess:"Schnellzugriff",unfinished:"unvollendet",delete:"Aus dem Verlauf löschen",confirmDelete:"Diese Anleitung aus dem Verlauf löschen?",completed:"abgeschlossen"},
+  it:{tagline:"Tocca una sfera per esplorare",describe:"Descrivi il tuo problema",placeholder:"Descrivi il problema...",generate:"Genera guida",generating:"In corso…",attachPhoto:"allega una foto",preparing:"preparazione…",photos:"foto",dictate:"Detta",takePhoto:"Scatta una foto",fromGallery:"Scegli dalla galleria",language:"Lingua",level:"Livello",basic:"Base",normal:"Normale",expert:"Esperto",history:"Cronologia",home:"Inizio",settings:"Impostazioni",searchGuides:"Cerca nelle tue guide...",noHistory:"Nessuna cronologia.",all:"Tutte",favourites:"Preferite",results:"risultati",tools:"Strumenti",warning:"Avvertenza",callPro:"Quando chiamare un professionista",step:"Passo",tip:"Consiglio",difficulty:"Difficoltà",time:"Tempo",done:"Hai completato tutti i passi.",solveAnother:"Risolvi altro",read:"Leggi ad alta voce",stop:"Ferma",share:"Condividi",copy:"Copia",pdf:"PDF",askTitle:"Hai dubbi?",askSub:"Chiedi quello che vuoi su questa guida",askPlaceholder:"Scrivi la tua domanda...",ask:"Chiedi",asking:"In corso…",failed:"Non è stato possibile generare la guida.",retry:"Riprova",edit:"Modifica",setKey:"Configura la mia chiave",offline:"Offline · le guide salvate restano disponibili",quickAccess:"Accesso rapido",unfinished:"da finire",delete:"Elimina dalla cronologia",confirmDelete:"Eliminare questa guida dalla cronologia?",completed:"completata"},
+  pt:{tagline:"Toque numa esfera para explorar",describe:"Descreva o seu problema",placeholder:"Descreva o problema...",generate:"Gerar guia",generating:"A processar…",attachPhoto:"anexar uma foto",preparing:"a preparar…",photos:"fotos",dictate:"Ditar",takePhoto:"Tirar uma foto",fromGallery:"Escolher da galeria",language:"Idioma",level:"Nível",basic:"Básico",normal:"Normal",expert:"Perito",history:"Histórico",home:"Início",settings:"Definições",searchGuides:"Procurar nos seus guias...",noHistory:"Sem histórico.",all:"Todos",favourites:"Favoritos",results:"resultados",tools:"Ferramentas",warning:"Aviso",callPro:"Quando chamar um profissional",step:"Passo",tip:"Dica",difficulty:"Dificuldade",time:"Tempo",done:"Concluiu todos os passos.",solveAnother:"Resolver outro",read:"Ler em voz alta",stop:"Parar",share:"Partilhar",copy:"Copiar",pdf:"PDF",askTitle:"Alguma dúvida?",askSub:"Pergunte o que precisar sobre este guia",askPlaceholder:"Escreva a sua dúvida...",ask:"Perguntar",asking:"A processar…",failed:"Não foi possível gerar o guia.",retry:"Tentar de novo",edit:"Editar",setKey:"Configurar a minha chave",offline:"Sem ligação · os guias guardados continuam disponíveis",quickAccess:"Acesso rápido",unfinished:"por terminar",delete:"Apagar do histórico",confirmDelete:"Apagar este guia do histórico?",completed:"concluído"},
+  nl:{tagline:"Tik op een sfeer",describe:"Beschrijf je probleem",placeholder:"Beschrijf het probleem...",generate:"Gids maken",generating:"Bezig…",attachPhoto:"foto toevoegen",preparing:"voorbereiden…",photos:"foto's",dictate:"Dicteren",takePhoto:"Foto maken",fromGallery:"Uit galerij",language:"Taal",level:"Niveau",basic:"Basis",normal:"Normaal",expert:"Expert",history:"Geschiedenis",home:"Start",settings:"Instellingen",searchGuides:"Zoek in je gidsen...",noHistory:"Nog geen geschiedenis.",all:"Alle",favourites:"Favorieten",results:"resultaten",tools:"Gereedschap",warning:"Waarschuwing",callPro:"Wanneer een vakman bellen",step:"Stap",tip:"Tip",difficulty:"Moeilijkheid",time:"Tijd",done:"Je hebt alle stappen voltooid.",solveAnother:"Iets anders oplossen",read:"Voorlezen",stop:"Stoppen",share:"Delen",copy:"Kopiëren",pdf:"PDF",askTitle:"Vragen?",askSub:"Vraag wat je wilt over deze gids",askPlaceholder:"Typ je vraag...",ask:"Vragen",asking:"Bezig…",failed:"De gids kon niet worden gemaakt.",retry:"Opnieuw",edit:"Bewerken",setKey:"Mijn sleutel instellen",offline:"Offline · opgeslagen gidsen blijven beschikbaar",quickAccess:"Snelle toegang",unfinished:"onafgemaakt",delete:"Uit geschiedenis verwijderen",confirmDelete:"Deze gids uit de geschiedenis verwijderen?",completed:"voltooid"},
+  no:{tagline:"Trykk på en sfære",describe:"Beskriv problemet ditt",placeholder:"Beskriv problemet...",generate:"Lag veiledning",generating:"Jobber…",attachPhoto:"legg ved et bilde",preparing:"forbereder…",photos:"bilder",dictate:"Diktér",takePhoto:"Ta et bilde",fromGallery:"Velg fra galleriet",language:"Språk",level:"Nivå",basic:"Enkel",normal:"Normal",expert:"Ekspert",history:"Historikk",home:"Hjem",settings:"Innstillinger",searchGuides:"Søk i veiledningene dine...",noHistory:"Ingen historikk ennå.",all:"Alle",favourites:"Favoritter",results:"treff",tools:"Verktøy",warning:"Advarsel",callPro:"Når du bør ringe en fagperson",step:"Steg",tip:"Tips",difficulty:"Vanskelighetsgrad",time:"Tid",done:"Du har fullført alle stegene.",solveAnother:"Løs noe annet",read:"Les høyt",stop:"Stopp",share:"Del",copy:"Kopier",pdf:"PDF",askTitle:"Spørsmål?",askSub:"Spør om hva som helst i denne veiledningen",askPlaceholder:"Skriv spørsmålet ditt...",ask:"Spør",asking:"Jobber…",failed:"Veiledningen kunne ikke lages.",retry:"Prøv igjen",edit:"Rediger",setKey:"Sett opp nøkkelen min",offline:"Frakoblet · lagrede veiledninger er fortsatt tilgjengelige",quickAccess:"Hurtigtilgang",unfinished:"uferdige",delete:"Slett fra historikken",confirmDelete:"Slette denne veiledningen fra historikken?",completed:"fullført"},
+  sv:{tagline:"Tryck på en sfär",describe:"Beskriv ditt problem",placeholder:"Beskriv problemet...",generate:"Skapa guide",generating:"Arbetar…",attachPhoto:"bifoga ett foto",preparing:"förbereder…",photos:"foton",dictate:"Diktera",takePhoto:"Ta ett foto",fromGallery:"Välj från galleriet",language:"Språk",level:"Nivå",basic:"Enkel",normal:"Normal",expert:"Expert",history:"Historik",home:"Hem",settings:"Inställningar",searchGuides:"Sök i dina guider...",noHistory:"Ingen historik ännu.",all:"Alla",favourites:"Favoriter",results:"träffar",tools:"Verktyg",warning:"Varning",callPro:"När du bör ringa en fackman",step:"Steg",tip:"Tips",difficulty:"Svårighet",time:"Tid",done:"Du har slutfört alla steg.",solveAnother:"Lös något annat",read:"Läs upp",stop:"Stoppa",share:"Dela",copy:"Kopiera",pdf:"PDF",askTitle:"Frågor?",askSub:"Fråga vad du vill om den här guiden",askPlaceholder:"Skriv din fråga...",ask:"Fråga",asking:"Arbetar…",failed:"Guiden kunde inte skapas.",retry:"Försök igen",edit:"Redigera",setKey:"Ställ in min nyckel",offline:"Offline · sparade guider är fortfarande tillgängliga",quickAccess:"Snabbåtkomst",unfinished:"oavslutade",delete:"Ta bort från historiken",confirmDelete:"Ta bort den här guiden från historiken?",completed:"klar"},
+};
+
+// Looks up a string for the current language, falling back to the base
+// language and then to Spanish, so a gap never leaves the screen blank.
+function uiText(lang,key){
+  const base=String(lang||"es").split("-")[0];
+  const pack=UI_TEXT[lang]||UI_TEXT[base]||UI_TEXT.es;
+  return (pack&&pack[key])||UI_TEXT.es[key]||key;
+}
+
 const LANGUAGES=[
   {code:"es", label:"Español",    native:"Español",     voice:"es-ES", flag:"🇪🇸"},
   {code:"es-419",label:"Español (Latinoamérica)",native:"Español LA",voice:"es-MX",flag:"🌎"},
@@ -2274,6 +2355,13 @@ function StarField({section,color,icon,label,onBack,onSelect}){
 }
 
 function OrbitalHome({onSelect}){
+  // This component is defined outside the main one, so it cannot see the T
+  // shorthand. It reads the saved language itself.
+  const orbitTagline=React.useMemo(()=>{
+    let lang="es";
+    try{ lang=localStorage.getItem("maestro_lang")||navigator.language||"es"; }catch(e){}
+    return uiText(lang,"tagline").toUpperCase();
+  },[]);
   const view=useViewControl();
   const viewRef=view.ref;
   const canvasRef=React.useRef(null);
@@ -2573,7 +2661,7 @@ function OrbitalHome({onSelect}){
 
   return(
     <div className="maestro-viewport" style={{position:"relative",width:"100%",minHeight:340}}>
-      <p style={{fontFamily:"monospace",fontSize:10,color:"#444",letterSpacing:"0.15em",textAlign:"center",paddingTop:6}}>// TOCA UNA ESFERA PARA EXPLORAR</p>
+      <p style={{fontFamily:"monospace",fontSize:10,color:"#444",letterSpacing:"0.15em",textAlign:"center",paddingTop:6}}>// {orbitTagline}</p>
       <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 24px)",cursor:"pointer",touchAction:"pan-y",display:"block"}}/>
 
       <ViewPad onNudge={view.nudge} onToggle={view.toggleSpin} onReset={view.reset}
@@ -3012,6 +3100,8 @@ export default function Maestro(){
     try{localStorage.setItem("maestro_lang",guideLang);}catch(e){}
   },[guideLang]);
   const langInfo=LANGUAGES.find(l=>l.code===guideLang)||LANGUAGES[0];
+  // Shorthand for interface strings, in whatever language the guides are set to.
+  const T=React.useCallback((k)=>uiText(guideLang,k),[guideLang]);
   const { listening, speaking, startListening, stopListening, speak, stopSpeaking,
           voices, voicePref, setVoicePref } = useSpeech();
 
@@ -3683,7 +3773,7 @@ export default function Maestro(){
                      animation:"fadeIn .4s var(--ease-out) both"}}>
           <span style={{fontSize:13}}>📡</span>
           <span style={{fontFamily:"monospace",fontSize:11,color:"#f4a261"}}>
-            Sin conexión · puedes consultar tus guías guardadas
+            {T("offline")}
           </span>
         </div>
       )}
@@ -3727,7 +3817,7 @@ export default function Maestro(){
                 {frequentCategories.length>0&&(
                   <div style={{marginBottom:6}}>
                     <p style={{fontFamily:"monospace",fontSize:10,color:"#445",
-                               letterSpacing:"0.14em",marginBottom:7}}>// ACCESO RÁPIDO</p>
+                               letterSpacing:"0.14em",marginBottom:7}}>// {T("quickAccess").toUpperCase()}</p>
                     <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:4}}>
                       {frequentCategories.map(({cat,n})=>(
                         <button key={cat.id} onClick={()=>handleCategory(cat)}
@@ -3778,14 +3868,14 @@ export default function Maestro(){
                 })()}
               </div>
             </div>
-            {history.length===0?<p style={{color:"#555",fontFamily:"monospace"}}>Sin historial aún.</p>:(
+            {history.length===0?<p style={{color:"#555",fontFamily:"monospace"}}>{T("noHistory")}</p>:(
               <>
                 {/* search bar */}
                 <div style={{position:"relative",marginBottom:12}}>
                   <input
                     value={histQuery}
                     onChange={e=>setHistQuery(e.target.value)}
-                    placeholder="🔍  Buscar en tus guías..."
+                    placeholder={"🔍  "+T("searchGuides")}
                     style={{width:"100%",background:"rgba(0,8,20,0.8)",
                             border:"1px solid rgba(0,180,255,0.25)",borderRadius:4,
                             color:"#00cfff",fontSize:14,padding:"11px 76px 11px 16px",
@@ -3890,9 +3980,9 @@ export default function Maestro(){
                             {fav?"★":"☆"}
                           </button>
                           <button onClick={()=>{
-                              if(confirm("¿Borrar esta guía del historial?")) deleteHistoryItem(item.id);
+                              if(confirm(T("confirmDelete"))) deleteHistoryItem(item.id);
                             }}
-                            title="Borrar del historial"
+                            title={T("delete")}
                             style={{background:"none",border:"none",cursor:"pointer",
                                     fontSize:14,color:"#3a4450",padding:"0 4px",
                                     transition:"color .25s var(--ease-soft)"}}>🗑</button>
@@ -3917,7 +4007,7 @@ export default function Maestro(){
               </div>
               <div>
                 <p style={{fontSize:12,letterSpacing:"0.1em",textTransform:"uppercase",margin:0,fontFamily:"monospace",fontWeight:"bold",color:accentColor}}>{selectedCategory?.label}</p>
-                <h2 style={{fontSize:18,margin:"2px 0 0",fontWeight:"bold",fontFamily:"monospace"}}>Describe tu problema</h2>
+                <h2 style={{fontSize:18,margin:"2px 0 0",fontWeight:"bold",fontFamily:"monospace"}}>{T("describe")}</h2>
               </div>
             </div>
             <ColumnFrame color={accentColor} altarDelay={enteredByStar?6100:0}>
@@ -3931,7 +4021,7 @@ export default function Maestro(){
                         boxSizing:"border-box",lineHeight:1.45,overflowY:"auto",
                         textAlign:"center",
                         textShadow:`0 0 12px ${accentColor}88, 0 1px 3px rgba(0,0,0,.95)`}}
-                placeholder="Describe el problema..."
+                placeholder={T("placeholder")}
                 value={problem} onChange={e=>setProblem(e.target.value)}/>
             </ColumnFrame>
 
@@ -3956,14 +4046,14 @@ export default function Maestro(){
 
               <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
                 <button onClick={()=>listening?stopListening():startListening(t=>setProblem(p=>p?p+" "+t:t))}
-                  title="Dictar"
+                  title={T("dictate")}
                   style={{width:40,height:40,borderRadius:"50%",flexShrink:0,
                           border:`2px solid ${listening?"#ff6b6b":accentColor+"66"}`,
                           background:listening?"rgba(255,80,80,0.2)":`${accentColor}14`,
                           color:listening?"#ff6b6b":accentColor,fontSize:16,cursor:"pointer"}}>
                   {listening?"⏹":"🎤"}
                 </button>
-                <label title="Hacer una foto"
+                <label title={T("takePhoto")}
                   style={{padding:"11px 13px",borderRadius:4,flexShrink:0,
                           border:`1px solid ${accentColor}55`,background:`${accentColor}14`,
                           color:accentColor,fontSize:14,
@@ -3974,7 +4064,7 @@ export default function Maestro(){
                     disabled={photos.length>=MAX_PHOTOS} style={{display:"none"}}
                     onChange={e=>{addPhotos(e.target.files);e.target.value="";}}/>
                 </label>
-                <label title="Elegir de la galería"
+                <label title={T("fromGallery")}
                   style={{padding:"11px 13px",borderRadius:4,flexShrink:0,
                           border:`1px solid ${accentColor}55`,background:"transparent",
                           color:accentColor,fontSize:14,
@@ -3986,9 +4076,9 @@ export default function Maestro(){
                     onChange={e=>{addPhotos(e.target.files);e.target.value="";}}/>
                 </label>
                 <span style={{fontFamily:"monospace",fontSize:10,color:"#667",flex:1,minWidth:90}}>
-                  {photoBusy ? "preparando…"
+                  {photoBusy ? T("preparing")
                     : photos.length ? `${photos.length}/${MAX_PHOTOS} foto${photos.length>1?"s":""}`
-                    : "adjunta una foto"}
+                    : T("attachPhoto")}
                 </span>
               </div>
 
@@ -3999,14 +4089,14 @@ export default function Maestro(){
                         letterSpacing:"0.02em",whiteSpace:"nowrap",
                         opacity:(problem.trim()||photos.length)?1:0.4}}
                 onClick={fetchGuide} disabled={!problem.trim()&&!photos.length}>
-                GENERAR GUÍA →
+                {T("generate")} →
               </button>
             </div>
 
             {/* Language and depth of the guide, kept outside the temple so the
                 oracle stays uncluttered. */}
             <div style={{display:"flex",gap:8,marginTop:12,alignItems:"center",flexWrap:"wrap"}}>
-              <span style={{fontFamily:"monospace",fontSize:11,color:"#556"}}>// Idioma:</span>
+              <span style={{fontFamily:"monospace",fontSize:11,color:"#556"}}>// {T("language")}:</span>
               <select value={guideLang} onChange={e=>setGuideLang(e.target.value)}
                 style={{background:"rgba(0,8,20,0.85)",border:"1px solid rgba(0,180,255,0.25)",
                         borderRadius:4,color:"#00cfff",fontFamily:"monospace",fontSize:11,
@@ -4016,7 +4106,7 @@ export default function Maestro(){
                 ))}
               </select>
 
-              <span style={{fontFamily:"monospace",fontSize:11,color:"#556",marginLeft:6}}>// Nivel:</span>
+              <span style={{fontFamily:"monospace",fontSize:11,color:"#556",marginLeft:6}}>// {T("level")}:</span>
               {[["simple","🟢"],["normal","🟡"],["experto","🔴"]].map(([v,dot])=>(
                 <button key={v} onClick={()=>setLevel(v)}
                   title={v==="simple"?"Principiante":v==="normal"?"Intermedio":"Experto"}
@@ -4173,10 +4263,10 @@ export default function Maestro(){
                              borderRadius:4,padding:"16px 20px",marginBottom:28}}>
                   <h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 4px",
                               fontFamily:"Georgia,'Times New Roman',serif",letterSpacing:"0.06em",
-                              textTransform:"uppercase"}}>💬 ¿Alguna duda?</h3>
+                              textTransform:"uppercase"}}>💬 {T("askTitle")}</h3>
                   <p style={{fontSize:11,color:"#6b5636",margin:"0 0 12px",
                              fontFamily:"Georgia,'Times New Roman',serif"}}>
-                    Pregunta lo que necesites sobre esta guía, o enseña una foto de cómo va
+                    {T("askSub")}
                   </p>
 
                   {followUps.map((f,i)=>(
@@ -4223,7 +4313,7 @@ export default function Maestro(){
                   )}
 
                   <textarea value={question} onChange={e=>setQuestion(e.target.value)}
-                    placeholder="Escribe tu duda..." rows={2} disabled={asking}
+                    placeholder={T("askPlaceholder")} rows={2} disabled={asking}
                     style={{width:"100%",background:"rgba(255,255,255,0.30)",
                             border:"1px solid rgba(120,98,58,0.35)",borderRadius:4,
                             color:"#3b2f1c",fontSize:13,padding:"9px 11px",
@@ -4231,7 +4321,7 @@ export default function Maestro(){
                             boxSizing:"border-box",lineHeight:1.5,marginBottom:8}}/>
 
                   <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
-                    <label title="Hacer una foto"
+                    <label title={T("takePhoto")}
                       style={{padding:"8px 11px",borderRadius:4,border:"1px solid rgba(120,98,58,0.35)",
                               background:"rgba(120,98,58,0.10)",color:"#5f4c2e",fontSize:13,
                               cursor:qPhotos.length>=MAX_PHOTOS?"not-allowed":"pointer",
@@ -4241,7 +4331,7 @@ export default function Maestro(){
                         disabled={qPhotos.length>=MAX_PHOTOS||asking} style={{display:"none"}}
                         onChange={e=>{addQPhotos(e.target.files);e.target.value="";}}/>
                     </label>
-                    <label title="Elegir de la galería"
+                    <label title={T("fromGallery")}
                       style={{padding:"8px 11px",borderRadius:4,border:"1px solid rgba(120,98,58,0.35)",
                               background:"transparent",color:"#5f4c2e",fontSize:13,
                               cursor:qPhotos.length>=MAX_PHOTOS?"not-allowed":"pointer",
@@ -4252,7 +4342,7 @@ export default function Maestro(){
                         onChange={e=>{addQPhotos(e.target.files);e.target.value="";}}/>
                     </label>
                     <button onClick={()=>listening?stopListening():startListening(t=>setQuestion(p=>p?p+" "+t:t))}
-                      title="Dictar" disabled={asking}
+                      title={T("dictate")} disabled={asking}
                       style={{padding:"8px 11px",borderRadius:4,
                               border:`1px solid ${listening?"rgba(150,60,30,0.5)":"rgba(120,98,58,0.35)"}`,
                               background:listening?"rgba(150,60,30,0.14)":"transparent",
@@ -4266,7 +4356,7 @@ export default function Maestro(){
                               fontFamily:"Georgia,'Times New Roman',serif",
                               cursor:asking?"wait":"pointer",
                               opacity:(asking||(!question.trim()&&!qPhotos.length))?0.45:1}}>
-                      {asking?"Consultando…":"Preguntar →"}
+                      {asking?T("asking"):T("ask")+" →"}
                     </button>
                   </div>
                 </div>
@@ -4284,7 +4374,7 @@ export default function Maestro(){
                         💬 WHATSAPP
                       </button>
                     </div>
-                    <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#f2e8cd",fontSize:15,fontWeight:"bold",cursor:"pointer",background:"#5c4a2c",marginTop:20,fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>reset()}>RESOLVER OTRO</button>
+                    <button style={{padding:"14px 24px",border:"none",borderRadius:4,color:"#f2e8cd",fontSize:15,fontWeight:"bold",cursor:"pointer",background:"#5c4a2c",marginTop:20,fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>reset()}>{T("solveAnother").toUpperCase()}</button>
                   </div>
                 )}
               </Papyrus>
@@ -4292,7 +4382,7 @@ export default function Maestro(){
             {!loading&&guide?.error&&(
               <div style={{textAlign:"center",padding:40,color:"#ff6b6b",fontFamily:"monospace"}}>
                 <span style={{fontSize:40}}>⚠️</span>
-                <p style={{fontSize:16,marginTop:12}}>No se pudo generar la guía.</p>
+                <p style={{fontSize:16,marginTop:12}}>{T("failed")}</p>
                 {guide.msg&&<p style={{fontSize:13,color:"#a05050",maxWidth:400,margin:"0 auto 8px"}}>{guide.msg}</p>}
                 {guide.raw&&<pre style={{fontSize:11,color:"#555",maxWidth:400,margin:"0 auto 16px",textAlign:"left",whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{guide.raw}</pre>}
                 {guide.needsKey&&(
@@ -4301,14 +4391,14 @@ export default function Maestro(){
                             background:"rgba(66,133,244,0.9)",color:"#fff",fontSize:14,
                             fontWeight:"bold",cursor:"pointer",fontFamily:"monospace",
                             marginBottom:14}}>
-                    🔑 CONFIGURAR MI CLAVE
+                    🔑 {T("setKey").toUpperCase()}
                   </button>
                 )}
                 <div style={{display:"flex",gap:9,justifyContent:"center",flexWrap:"wrap"}}>
                   {/* Retries with the text already written - the old flow sent the
                       user back to an empty form. */}
                   <button style={{padding:"12px 22px",border:"none",borderRadius:4,color:"#000",fontSize:14,fontWeight:"bold",cursor:"pointer",background:"#f4a261",fontFamily:"monospace"}}
-                    onClick={()=>fetchGuide()}>↻ REINTENTAR</button>
+                    onClick={()=>fetchGuide()}>↻ {T("retry").toUpperCase()}</button>
                   {aiProvider==="claude"&&apiKeys.gemini&&(
                     <button style={{padding:"12px 22px",border:"1px solid rgba(66,133,244,0.4)",borderRadius:4,color:"#6ba3f5",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}}
                       onClick={()=>{setAiProvider("gemini");setTimeout(()=>fetchGuide(),60);}}>✦ PROBAR GEMINI</button>
@@ -4318,7 +4408,7 @@ export default function Maestro(){
                       onClick={()=>{setAiProvider("claude");setTimeout(()=>fetchGuide(),60);}}>⚡ PROBAR CLAUDE</button>
                   )}
                   <button style={{padding:"12px 22px",border:"1px solid rgba(255,255,255,0.14)",borderRadius:4,color:"#889",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"monospace"}}
-                    onClick={()=>setScreen("describe")}>✎ EDITAR</button>
+                    onClick={()=>setScreen("describe")}>✎ {T("edit").toUpperCase()}</button>
                 </div>
               </div>
             )}
