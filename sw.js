@@ -6,6 +6,10 @@ const SHELL = [
   "/icon-192.png", "/icon-512.png", "/icon-180.png", "/favicon.ico",
 ];
 
+// The music is large and optional, so it is never part of the install step:
+// it would delay activation and fail the whole thing if absent. It is cached
+// opportunistically the first time it is played instead.
+
 self.addEventListener("install", (e) => {
   // addAll fails the whole install if any single file 404s, so fetch each
   // one independently and keep whatever succeeds.
@@ -31,6 +35,10 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(req.url);
   // Never cache the AI endpoints: a stale guide would be worse than an error.
   if (/anthropic\.com|googleapis\.com/.test(url.hostname)) return;
+
+  // Audio is streamed with Range requests, which a cached 200 response cannot
+  // satisfy. Letting these through to the network keeps seeking working.
+  if (req.headers.has("range")) return;
 
   // Navigations: try the network so updates land, fall back to the cached shell.
   if (req.mode === "navigate") {
