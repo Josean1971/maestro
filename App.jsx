@@ -363,70 +363,7 @@ function useMatrixAudio() {
   },[]);
 
   React.useEffect(()=>()=>stop(),[stop]);
-  // ---- recorded track -----------------------------------------------------
-  // A file served from /musica.mp3. It is deliberately NOT imported: an import
-  // would have to resolve at build time and be bundled, whereas a plain URL is
-  // fetched at runtime. If the file is absent the app simply keeps using the
-  // synthesised music, so nothing breaks when it has not been uploaded.
-  const trackRef=React.useRef(null);
-  const [source,setSource]=React.useState(null);   // "synth" | "track"
-
-  const startTrack=React.useCallback(()=>{
-    if(!trackRef.current){
-      const a=new Audio("/musica.mp3");
-      a.loop=true;
-      a.volume=0.55;
-      a.preload="none";
-      trackRef.current=a;
-      // Published so the reader can turn it down while it speaks: otherwise
-      // the two compete for audio focus and the voice can be lost entirely.
-      try{ window.__maestroMusic=a; }catch(e){}
-    }
-    return trackRef.current.play()
-      .then(()=>{ setSource("track"); return true; })
-      .catch(()=>false);      // missing file, or blocked before a gesture
-  },[]);
-
-  const stopTrack=React.useCallback(()=>{
-    const a=trackRef.current;
-    if(a){ try{ a.pause(); a.currentTime=0; }catch(e){} }
-    try{ if(window.__maestroMusic===a) window.__maestroMusic=null; }catch(e){}
-  },[]);
-
-  // Picks between the two at random. If the recording cannot play, the
-  // synthesiser takes over rather than leaving silence.
-  const startRandom=React.useCallback(async()=>{
-    stopTrack();
-    const wantTrack=Math.random()<0.5;
-    if(wantTrack){
-      const ok=await startTrack();
-      if(ok) return;
-    }
-    start();
-    setSource("synth");
-  },[start,startTrack,stopTrack]);
-
-  const stopAll=React.useCallback(()=>{
-    stop();
-    stopTrack();
-    setSource(null);
-  },[stop,stopTrack]);
-
-  // Moves to the other kind, so a long session is not stuck on one.
-  const nextTrack=React.useCallback(async()=>{
-    if(source==="track"){
-      stopTrack(); start(); setSource("synth");
-    }else{
-      stop();
-      const ok=await startTrack();
-      if(!ok){ start(); setSource("synth"); }
-    }
-  },[source,start,stop,startTrack]);
-
-  React.useEffect(()=>()=>{ stopTrack(); },[stopTrack]);
-
-  return {playing:playing||source==="track",start:startRandom,stop:stopAll,
-          next:nextTrack,source};
+  return {playing,start,stop};
 }
 // ── SPEECH HOOK ──
 function useSpeech() {
@@ -563,20 +500,10 @@ function useSpeech() {
     if (wasBusy) synth.cancel();
     if (synth.paused) { try { synth.resume(); } catch(e) {} }
 
-    // Music competes for audio focus and on Android can silence the reader
-    // outright. It is turned down for the duration and restored afterwards.
-    const duck = () => {
-      try {
-        const m = window.__maestroMusic;
-        if (m && !m.paused) { m.__prevVolume = m.volume; m.volume = 0.12; }
-      } catch(e) {}
-    };
-    const unduck = () => {
-      try {
-        const m = window.__maestroMusic;
-        if (m && typeof m.__prevVolume === "number") { m.volume = m.__prevVolume; }
-      } catch(e) {}
-    };
+    // No-ops now that the recorded track is gone, kept so the call sites below
+    // stay simple if it ever returns.
+    const duck = () => {};
+    const unduck = () => {};
 
     const fire = () => {
       const voice = pickVoice(lang);
@@ -3231,7 +3158,7 @@ export default function Maestro(){
       window.removeEventListener("keydown",greet);
     };
   },[autoSpoken,speak]);
-  const {playing,start,stop,next:nextMusic,source:musicSource}=useMatrixAudio();
+  const {playing,start,stop}=useMatrixAudio();
 
   // Matches the visible name, the section, and the everyday words above, so
   // "grifo" reaches Plomería and "nevera" reaches Electrodomésticos.
@@ -3600,17 +3527,6 @@ export default function Maestro(){
             {playing?"◼":"▶"}
           </button>{history.length>0&&<button onClick={()=>{setViewHistory(true);setScreen("home");}} style={{background:"rgba(0,15,0,0.8)",border:"1px solid rgba(0,255,65,0.2)",color:"#00cc33",padding:"6px 14px",borderRadius:4,cursor:"pointer",fontSize:12,fontFamily:"monospace"}}>📋 Historial ({history.length})</button>}
           {(screen!=="home"||viewHistory)&&<button onClick={reset} style={{background:"rgba(0,15,0,0.8)",border:"1px solid rgba(0,255,65,0.2)",color:"#00cc33",padding:"6px 14px",borderRadius:4,cursor:"pointer",fontSize:12,fontFamily:"monospace"}}>← Inicio</button>}
-          {/* Skip to the other kind of music. Only useful while something is
-              playing, so it stays hidden otherwise. */}
-          {playing&&(
-            <button onClick={nextMusic} title="Cambiar de música"
-              style={{background:"rgba(0,8,20,0.8)",border:"1px solid rgba(0,180,255,0.25)",
-                      color:"#00aaee",padding:"6px 12px",borderRadius:4,cursor:"pointer",
-                      fontSize:12,fontFamily:"monospace",
-                      transition:"all .25s var(--ease-soft)"}}>
-              ⏭ {musicSource==="track"?"♫":"◈"}
-            </button>
-          )}
         </div>
       </header>
 
