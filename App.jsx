@@ -208,7 +208,7 @@ function MatrixRain() {
     rafId = requestAnimationFrame(animate);
     return () => { cancelAnimationFrame(rafId); window.removeEventListener("resize", resize); };
   }, []);
-  return <canvas ref={canvasRef} style={{ position:"fixed", top:0, left:0, width:"100%", height:"100%", zIndex:0, opacity:0.82 }} />;
+  return <canvas className="no-print" ref={canvasRef} style={{ position:"fixed", top:0, left:0, width:"100%", height:"100%", zIndex:0, opacity:0.82 }} />;
 }
 
 function useMatrixAudio() {
@@ -2096,7 +2096,7 @@ function StarJourney({color,icon,from,onDone}){
     return()=>{cancelAnimationFrame(rafRef.current);stopSound&&stopSound();try{window.__maestroQuake=0;}catch(e){}};
   },[from,color,onDone]);
 
-  return <canvas ref={canvasRef}
+  return <canvas className="no-print" ref={canvasRef}
     style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"none",
             width:"100vw",height:"100vh"}}/>;
 }
@@ -2830,7 +2830,8 @@ function Papyrus({children,tint="#c9a227"}){
   },[]);
 
   return(
-    <div style={{position:"relative",margin:"0 0 20px",padding:"30px 28px 34px",
+    <div className="print-sheet"
+         style={{position:"relative",margin:"0 0 20px",padding:"30px 28px 34px",
                  backgroundColor:"#dfcda0",
                  backgroundImage:"url("+texture+")",
                  backgroundSize:"256px 256px",
@@ -2865,6 +2866,14 @@ function Papyrus({children,tint="#c9a227"}){
         WebkitMaskImage:"linear-gradient(90deg,#000 0,transparent 5px),linear-gradient(270deg,#000 0,transparent 5px)",
         maskImage:"linear-gradient(90deg,#000 0,transparent 5px),linear-gradient(270deg,#000 0,transparent 5px)"}}/>
 
+      {/* Only on paper: a printed page needs to say where it came from. */}
+      <div className="print-only" style={{display:"none"}}>
+        <div style={{borderBottom:"1px solid #999",paddingBottom:"4pt",marginBottom:"10pt",
+                     display:"flex",justifyContent:"space-between",fontSize:"9pt",color:"#555"}}>
+          <span>MAESTRO · guía paso a paso</span>
+          <span>{new Date().toLocaleDateString()}</span>
+        </div>
+      </div>
       <div style={{position:"relative"}}>{children}</div>
     </div>
   );
@@ -3544,7 +3553,7 @@ export default function Maestro(){
   return(
     <div style={{minHeight:"100vh",maxHeight:"100vh",width:"100vw",overflowX:"hidden",background:screen==="describe"?"linear-gradient(180deg,#050b14 0%,#0a1727 32%,#132a42 66%,#1d3d5c 100%)":(darkMode?"#f0f4f8":"#000"),color:darkMode?"#111":"#eee",fontFamily:"Georgia,serif",position:"relative",overflowX:"hidden"}}>
       {screen!=="describe" && !LOW_MEM && <MatrixRain/>}
-      <header style={{position:"sticky",top:0,zIndex:10,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",width:"100%",boxSizing:"border-box",background:"rgba(0,10,0,0.82)",backdropFilter:"blur(14px)",borderBottom:"1px solid rgba(0,255,65,0.15)"}}>
+      <header className="no-print" style={{position:"sticky",top:0,zIndex:10,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",width:"100%",boxSizing:"border-box",background:"rgba(0,10,0,0.82)",backdropFilter:"blur(14px)",borderBottom:"1px solid rgba(0,255,65,0.15)"}}>
         <button onClick={reset} style={{display:"flex",alignItems:"center",gap:10,background:"none",border:"none",cursor:"pointer",padding:0}}>
           <span style={{fontSize:26,fontFamily:"monospace",color:"#c77dff",fontWeight:"bold",textShadow:"0 0 12px #c77dff"}}>⬡</span>
           <span style={{fontSize:18,fontWeight:"bold",color:"#eee",letterSpacing:"0.12em",fontFamily:"monospace",textShadow:"0 0 8px rgba(199,125,255,0.4)"}}>MAESTRO</span>
@@ -3834,7 +3843,7 @@ export default function Maestro(){
         </div>
       )}
       {!online&&(
-        <div style={{position:"sticky",top:0,zIndex:40,background:"rgba(244,162,97,0.14)",
+        <div className="no-print" style={{position:"sticky",top:0,zIndex:40,background:"rgba(244,162,97,0.14)",
                      borderBottom:"1px solid rgba(244,162,97,0.3)",padding:"7px 14px",
                      display:"flex",alignItems:"center",gap:9,
                      animation:"fadeIn .4s var(--ease-out) both"}}>
@@ -4217,14 +4226,14 @@ export default function Maestro(){
                 </div>
 
                 <div style={{display:"flex",justifyContent:"flex-end",marginBottom:16}}>
-                  <button onClick={()=>window.print()} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,color:"#2f5e2a",fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",cursor:"pointer",fontWeight:"600"}}>📄 Guardar PDF</button>
+                  <button onClick={()=>window.print()} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,color:"#2f5e2a",fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",cursor:"pointer",fontWeight:"600"}}>🖨 Imprimir / PDF</button>
                 </div>
 
                 <div style={{height:4,background:"rgba(120,98,58,0.16)",borderRadius:2,marginBottom:24,overflow:"hidden"}}>
                   <div style={{height:"100%",borderRadius:2,transition:"width .55s var(--ease-out)",background:"#584627",width:`${guide.pasos?(completedSteps.length/guide.pasos.length)*100:0}%`}}/>
                 </div>
 
-                {guide.advertencia&&<div style={{display:"flex",gap:12,background:"rgba(150,60,30,0.14)",border:"1px solid rgba(150,60,30,0.4)",borderRadius:4,padding:"13px 16px",marginBottom:20,alignItems:"flex-start"}}><span>⚠️</span><p style={{margin:0,fontSize:14,color:"#8a3a1e",lineHeight:1.55,fontFamily:"Georgia,'Times New Roman',serif"}}>{guide.advertencia}</p></div>}
+                {guide.advertencia&&<div className="print-note" style={{display:"flex",gap:12,background:"rgba(150,60,30,0.14)",border:"1px solid rgba(150,60,30,0.4)",borderRadius:4,padding:"13px 16px",marginBottom:20,alignItems:"flex-start"}}><span>⚠️</span><p style={{margin:0,fontSize:14,color:"#8a3a1e",lineHeight:1.55,fontFamily:"Georgia,'Times New Roman',serif"}}>{guide.advertencia}</p></div>}
 
                 {guide.herramientas?.length>0&&(
                   <div style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"16px 20px",marginBottom:24}}>
@@ -4241,7 +4250,7 @@ export default function Maestro(){
                     const done=completedSteps.includes(i);
                     const query=encodeURIComponent((selectedCategory?.label||"")+" "+paso.titulo);
                     return(
-                      <div key={i} style={{border:`1px solid ${done?"rgba(90,72,40,0.55)":"rgba(120,98,58,0.32)"}`,borderRadius:4,overflow:"hidden",transition:"background .3s var(--ease-soft), border-color .3s var(--ease-soft), color .3s var(--ease-soft)",background:done?"rgba(120,98,58,0.20)":"rgba(160,138,90,0.10)"}}>
+                      <div key={i} className="print-step" style={{border:`1px solid ${done?"rgba(90,72,40,0.55)":"rgba(120,98,58,0.32)"}`,borderRadius:4,overflow:"hidden",transition:"background .3s var(--ease-soft), border-color .3s var(--ease-soft), color .3s var(--ease-soft)",background:done?"rgba(120,98,58,0.20)":"rgba(160,138,90,0.10)"}}>
                         <div onClick={()=>toggleStep(i)} style={{display:"flex",gap:14,padding:"15px 17px",cursor:"pointer"}}>
                           <div style={{width:30,height:30,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold",fontFamily:"Georgia,'Times New Roman',serif",transition:"background .3s var(--ease-soft), border-color .3s var(--ease-soft), color .3s var(--ease-soft)",flexShrink:0,marginTop:2,background:done?"#5c4a2c":"rgba(120,98,58,0.22)",color:done?"#f2e8cd":"#584627"}}>{done?"✓":i+1}</div>
                           <div style={{flex:1}}>
@@ -4259,7 +4268,7 @@ export default function Maestro(){
                             )}
                           </div>
                         </div>
-                        {!done&&<div style={{display:"flex",gap:8,padding:"10px 17px 13px 61px",borderTop:"1px solid rgba(120,98,58,0.22)"}}>
+                        {!done&&<div className="no-print" style={{display:"flex",gap:8,padding:"10px 17px 13px 61px",borderTop:"1px solid rgba(120,98,58,0.22)"}}>
                           <a href={`https://www.youtube.com/results?search_query=${query}`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:4,background:"rgba(163,52,23,0.14)",border:"1px solid rgba(163,52,23,0.35)",color:"#8f2a12",fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",textDecoration:"none",fontWeight:"600"}}>▶ YouTube</a>
                           <a href={`https://www.google.com/search?tbm=isch&q=${query}`} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:4,background:"rgba(31,79,138,0.13)",border:"1px solid rgba(31,79,138,0.32)",color:"#1f4f8a",fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",textDecoration:"none",fontWeight:"600"}}>🖼 Imágenes</a>
 
@@ -4322,11 +4331,11 @@ export default function Maestro(){
                   </div>
                 )}
 
-                {guide.cuando_llamar_profesional&&<div style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"16px 20px",marginBottom:28}}><h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 10px",fontFamily:"Georgia,'Times New Roman',serif",textTransform:"uppercase",letterSpacing:"0.06em"}}>👷 ¿Cuándo llamar a un profesional?</h3><p style={{margin:0,fontSize:14,color:"#5c4a2c",lineHeight:1.6,fontFamily:"Georgia,'Times New Roman',serif"}}>{guide.cuando_llamar_profesional}</p></div>}
+                {guide.cuando_llamar_profesional&&<div className="print-note" style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"16px 20px",marginBottom:28}}><h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 10px",fontFamily:"Georgia,'Times New Roman',serif",textTransform:"uppercase",letterSpacing:"0.06em"}}>👷 ¿Cuándo llamar a un profesional?</h3><p style={{margin:0,fontSize:14,color:"#5c4a2c",lineHeight:1.6,fontFamily:"Georgia,'Times New Roman',serif"}}>{guide.cuando_llamar_profesional}</p></div>}
 
                 {/* Ask about anything the guide did not cover. Answers are
                     independent of each other, so each request stays small. */}
-                <div style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",
+                <div className="no-print" style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",
                              borderRadius:4,padding:"16px 20px",marginBottom:28}}>
                   <h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 4px",
                               fontFamily:"Georgia,'Times New Roman',serif",letterSpacing:"0.06em",
@@ -4435,7 +4444,7 @@ export default function Maestro(){
                     <p style={{color:"#584627",margin:0,fontFamily:"Georgia,'Times New Roman',serif"}}>Has completado todos los pasos.</p>
                     <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:12}}>
                       <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#3b2f1c",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>{const t=guide.titulo+(guide.pasos?.map((p,i)=>"\n"+(i+1)+". "+p.titulo+"\n"+p.descripcion)||[]).join("");copyText(t).then(ok=>alert(ok?"¡Copiado!":"No se pudo copiar automáticamente. Mantén pulsado el texto de la guía para seleccionarlo."));}}>📋 COPIAR</button>
-                      <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#3b2f1c",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>window.print()}>📄 PDF</button>
+                      <button style={{padding:"12px 18px",border:"1px solid rgba(0,180,255,0.3)",borderRadius:4,color:"#3b2f1c",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}} onClick={()=>window.print()}>🖨 IMPRIMIR</button>
                       <button style={{padding:"12px 18px",border:"1px solid rgba(87,204,153,0.3)",borderRadius:4,color:"#2f5e3a",fontSize:14,cursor:"pointer",background:"transparent",fontFamily:"Georgia,'Times New Roman',serif"}}
                         onClick={()=>{const t=encodeURIComponent("📋 Guía MAESTRO: "+guide.titulo+"\n\n"+(guide.pasos?.map((p,i)=>(i+1)+". "+p.titulo+"\n"+p.descripcion)||[]).join("\n\n"));window.open("https://wa.me/?text="+t,"_blank");}}>
                         💬 WHATSAPP
@@ -4508,6 +4517,65 @@ export default function Maestro(){
         @keyframes pulseSoft{0%,100%{opacity:.55;transform:scale(1);}50%{opacity:1;transform:scale(1.14);}}
         .maestro-viewport{height:calc(100vh - 150px);height:calc(100dvh - 150px);}
         .maestro-tall{min-height:calc(100vh - 150px);min-height:calc(100dvh - 150px);}
+
+        /* ---- printing -------------------------------------------------
+           Without these the printout carries the whole interface: canvas,
+           buttons, the temple photograph, the dark background. The rule is
+           simple - hide everything marked as screen furniture, and lay the
+           guide out as a plain document on white paper. */
+        @media print{
+          @page{ margin:16mm 14mm; }
+          html,body{
+            background:#fff !important;
+            color:#111 !important;
+            max-height:none !important;
+            height:auto !important;
+            overflow:visible !important;
+          }
+          .no-print{ display:none !important; }
+          .print-only{ display:block !important; }
+          /* the parchment becomes plain paper */
+          .print-sheet{
+            background:#fff !important;
+            background-image:none !important;
+            box-shadow:none !important;
+            clip-path:none !important;
+            border:none !important;
+            padding:0 !important;
+            margin:0 !important;
+            color:#111 !important;
+          }
+          .print-sheet *{
+            color:#111 !important;
+            background:transparent !important;
+            background-image:none !important;
+            text-shadow:none !important;
+            box-shadow:none !important;
+            border-color:#bbb !important;
+          }
+          /* keep a step and its text on the same page */
+          .print-step{
+            break-inside:avoid;
+            page-break-inside:avoid;
+            border:none !important;
+            border-bottom:1px solid #ddd !important;
+            border-radius:0 !important;
+            padding:8px 0 !important;
+            margin:0 !important;
+          }
+          .print-title{ font-size:19pt !important; margin-bottom:4pt !important; }
+          .print-meta{ font-size:9pt !important; color:#555 !important; }
+          .print-note{
+            border:1px solid #999 !important;
+            padding:6pt 8pt !important;
+            margin:6pt 0 !important;
+            break-inside:avoid;
+          }
+          /* a completed step should not print greyed out */
+          .print-sheet [style*="opacity"]{ opacity:1 !important; }
+          a{ text-decoration:none !important; }
+          a[href^="http"]::after{ content:" (" attr(href) ")"; font-size:8pt; color:#666; }
+        }
         @keyframes flameDance{0%,100%{transform:scaleY(1) scaleX(1) skewX(0deg);opacity:.92;}22%{transform:scaleY(1.14) scaleX(.93) skewX(-3.5deg);opacity:1;}46%{transform:scaleY(.94) scaleX(1.06) skewX(2.8deg);opacity:.86;}71%{transform:scaleY(1.09) scaleX(.96) skewX(-1.8deg);opacity:.97;}}
         @keyframes flameGlow{0%,100%{opacity:.62;transform:translate(-50%,-50%) scale(1);}38%{opacity:1;transform:translate(-50%,-50%) scale(1.16);}64%{opacity:.78;transform:translate(-50%,-50%) scale(1.05);}}
         @keyframes flameCore{0%,100%{opacity:.75;transform:translateX(-50%) scale(1);}40%{opacity:1;transform:translateX(-50%) scale(1.18);}}
