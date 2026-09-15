@@ -431,30 +431,37 @@ function useSpeech() {
 
   // Falls back to the best automatic choice when nothing is selected,
   // preferring the neural voices a platform ships over its older defaults.
-  const pickVoice = React.useCallback((langTag) => {
+  const pickVoice = React.useCallback((langTag, localOnly) => {
     const want=(langTag||"es-ES");
     const base=want.split("-")[0].toLowerCase();
     const all=window.speechSynthesis.getVoices();
     // Exact region first, then any voice for the same language.
     let voices=all.filter(v=>v.lang.toLowerCase().replace("_","-")===want.toLowerCase());
     if(!voices.length) voices=all.filter(v=>v.lang.toLowerCase().split(/[-_]/)[0]===base);
+    if (localOnly) {
+      const local = voices.filter(v => v.localService);
+      if (local.length) voices = local;
+    }
     if (!voices.length) return null;
-    if (voicePref.name) {
+    if (voicePref.name && !localOnly) {
       const chosen = voices.find(v => v.name === voicePref.name);
       if (chosen) return chosen;
     }
-    const score = (v) => {
+    const score = (v, preferLocal) => {
       const n = (v.name || "").toLowerCase();
       let s = 0;
-      if (/natural|neural|enhanced|premium|wavenet|siri/.test(n)) s += 40;
-      if (/google/.test(n)) s += 25;
-      if (/microsoft|helena|laura|pablo|alvaro|elvira/.test(n)) s += 15;
+      // Installed on the device, so it cannot fail for want of a connection.
+      if (v.localService) s += preferLocal ? 60 : 8;
+      if (/natural|neural|enhanced|premium|wavenet|siri/.test(n)) s += 18;
+      if (/microsoft|helena|laura|pablo|alvaro|elvira|monica|jorge/.test(n)) s += 12;
+      if (/google/.test(n)) s += 6;
       if (v.lang.toLowerCase().replace("_","-")===want.toLowerCase()) s += 10;
-      if (v.localService) s += 5;               // local voices don't stutter
-      if (/compact|eloquence|espeak/.test(n)) s -= 30;
+      if (/compact|eloquence|espeak/.test(n)) s -= 25;
       return s;
     };
-    return voices.sort((a, b) => score(b) - score(a))[0];
+    // `preferLocal` is raised on a retry after the engine has failed once.
+    const preferLocal = localOnly || voices.some(v => v.localService);
+    return voices.sort((a, b) => score(b, preferLocal) - score(a, preferLocal))[0];
   }, [voicePref]);
 
   // Break text into speakable pieces: sentences first, then group them so each
@@ -505,13 +512,16 @@ function useSpeech() {
     const duck = () => {};
     const unduck = () => {};
 
-    const fire = () => {
-      const voice = pickVoice(lang);
+    // `attempt` 0 uses the best voice available; 1 retries with one installed
+    // on the device; 2 lets the engine choose for itself.
+    const fire = (attempt) => {
+      const voice = attempt >= 2 ? null : pickVoice(lang, attempt === 1);
       // If the device has no voice at all for this language, speaking with an
       // unknown lang tag produces silence. Falling back to the system default
       // at least reads the text.
       const useLang = voice ? lang : (pickVoice("es-ES") ? "es-ES" : undefined);
 
+      let retried = false;
       setSpeaking(true);
       duck();
       // Heavy canvas work starves the speech engine on low-end devices, so the
@@ -533,14 +543,25 @@ function useSpeech() {
           };
         }
         utt.onerror = (ev) => {
-          setSpeaking(false);
-          unduck();
-          try { window.__maestroSpeaking = false; } catch(e) {}
           // "interrupted" and "canceled" are normal when the user stops it.
           const why = ev && ev.error;
-          if (why && why !== "interrupted" && why !== "canceled") {
-            try { window.__maestroVoiceError = why; } catch(e) {}
+          if (!why || why === "interrupted" || why === "canceled") {
+            setSpeaking(false); unduck();
+            try { window.__maestroSpeaking = false; } catch(e) {}
+            return;
           }
+          try { window.__maestroVoiceError = why; } catch(e) {}
+
+          // A network voice that could not be synthesised: try again with one
+          // installed on the device, and failing that let the engine decide.
+          if (attempt < 2 && !retried) {
+            retried = true;
+            try { synth.cancel(); } catch(e) {}
+            setTimeout(() => fire(attempt + 1), 120);
+            return;
+          }
+          setSpeaking(false); unduck();
+          try { window.__maestroSpeaking = false; } catch(e) {}
         };
         synth.speak(utt);
       });
@@ -548,23 +569,14 @@ function useSpeech() {
       // If nothing is playing a second later, say so plainly instead of
       // failing in silence: guessing at this from the outside is hopeless.
       setTimeout(() => {
+        if (retried) return;                 // a retry is already under way
         if (!synth.speaking && !synth.pending) {
+          if (attempt < 2) { retried = true; fire(attempt + 1); return; }
           setSpeaking(false);
           unduck();
           try { window.__maestroSpeaking = false; } catch(e) {}
-          const why = (typeof window!=="undefined" && window.__maestroVoiceError) || null;
-          const n = (synth.getVoices()||[]).length;
-          alert(
-            "La lectura no llegó a sonar.\n\n"+
-            "Voces disponibles: "+n+"\n"+
-            "Idioma pedido: "+(useLang||"(por defecto)")+"\n"+
-            "Voz elegida: "+(voice?voice.name:"ninguna")+"\n"+
-            (why?("Error del motor: "+why+"\n"):"")+
-            "\nSi las voces son 0, instala los datos de voz desde los ajustes "+
-            "de Android, en Texto a voz."
-          );
         }
-      }, 1000);
+      }, 1100);
     };
 
     // Voices arrive asynchronously on Android; speaking before they load picks
@@ -573,13 +585,13 @@ function useSpeech() {
       // No voices yet: there is no choice but to wait, and accept that some
       // browsers may refuse a deferred call.
       let done = false;
-      const go = () => { if (!done) { done = true; fire(); } };
+      const go = () => { if (!done) { done = true; fire(0); } };
       try { synth.onvoiceschanged = go; } catch(e) {}
       setTimeout(go, 300);
     } else if (wasBusy) {
-      setTimeout(fire, 60);          // a cancel() needs a tick to settle
+      setTimeout(() => fire(0), 60);  // a cancel() needs a tick to settle
     } else {
-      fire();                        // straight away, inside the gesture
+      fire(0);                       // straight away, inside the gesture
     }
   }, [pickVoice, splitForSpeech, voicePref]);
 
