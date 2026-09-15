@@ -378,6 +378,9 @@ function useMatrixAudio() {
       a.volume=0.55;
       a.preload="none";
       trackRef.current=a;
+      // Published so the reader can turn it down while it speaks: otherwise
+      // the two compete for audio focus and the voice can be lost entirely.
+      try{ window.__maestroMusic=a; }catch(e){}
     }
     return trackRef.current.play()
       .then(()=>{ setSource("track"); return true; })
@@ -387,6 +390,7 @@ function useMatrixAudio() {
   const stopTrack=React.useCallback(()=>{
     const a=trackRef.current;
     if(a){ try{ a.pause(); a.currentTime=0; }catch(e){} }
+    try{ if(window.__maestroMusic===a) window.__maestroMusic=null; }catch(e){}
   },[]);
 
   // Picks between the two at random. If the recording cannot play, the
@@ -551,11 +555,28 @@ function useSpeech() {
     if (!parts.length) return;
     const lang = langTag || "es-ES";
 
-    // Android leaves the engine wedged if speak() follows cancel() in the same
-    // tick, and it also reports paused after a cancel. Clearing, resuming and
-    // then queueing on the next tick is what makes it reliable there.
-    synth.cancel();
+    // Only clear the queue when something is actually playing. Calling
+    // cancel() needlessly forced the deferred path below, and browsers require
+    // speak() to run inside the user's gesture - a deferred call is silently
+    // ignored on several of them.
+    const wasBusy = synth.speaking || synth.pending;
+    if (wasBusy) synth.cancel();
     if (synth.paused) { try { synth.resume(); } catch(e) {} }
+
+    // Music competes for audio focus and on Android can silence the reader
+    // outright. It is turned down for the duration and restored afterwards.
+    const duck = () => {
+      try {
+        const m = window.__maestroMusic;
+        if (m && !m.paused) { m.__prevVolume = m.volume; m.volume = 0.12; }
+      } catch(e) {}
+    };
+    const unduck = () => {
+      try {
+        const m = window.__maestroMusic;
+        if (m && typeof m.__prevVolume === "number") { m.volume = m.__prevVolume; }
+      } catch(e) {}
+    };
 
     const fire = () => {
       const voice = pickVoice(lang);
@@ -565,6 +586,7 @@ function useSpeech() {
       const useLang = voice ? lang : (pickVoice("es-ES") ? "es-ES" : undefined);
 
       setSpeaking(true);
+      duck();
       // Heavy canvas work starves the speech engine on low-end devices, so the
       // animations are asked to idle while the guide is being read aloud.
       try { window.__maestroSpeaking = true; } catch(e) {}
@@ -579,11 +601,13 @@ function useSpeech() {
         if (idx === parts.length - 1) {
           utt.onend = () => {
             setSpeaking(false);
+            unduck();
             try { window.__maestroSpeaking = false; } catch(e) {}
           };
         }
         utt.onerror = (ev) => {
           setSpeaking(false);
+          unduck();
           try { window.__maestroSpeaking = false; } catch(e) {}
           // "interrupted" and "canceled" are normal when the user stops it.
           const why = ev && ev.error;
@@ -599,6 +623,7 @@ function useSpeech() {
       setTimeout(() => {
         if (!synth.speaking && !synth.pending) {
           setSpeaking(false);
+          unduck();
           try { window.__maestroSpeaking = false; } catch(e) {}
         }
       }, 900);
@@ -607,12 +632,16 @@ function useSpeech() {
     // Voices arrive asynchronously on Android; speaking before they load picks
     // no voice and can fall silent. Wait briefly for them the first time.
     if (synth.getVoices().length === 0) {
+      // No voices yet: there is no choice but to wait, and accept that some
+      // browsers may refuse a deferred call.
       let done = false;
       const go = () => { if (!done) { done = true; fire(); } };
       try { synth.onvoiceschanged = go; } catch(e) {}
-      setTimeout(go, 350);          // and go anyway if the event never fires
+      setTimeout(go, 300);
+    } else if (wasBusy) {
+      setTimeout(fire, 60);          // a cancel() needs a tick to settle
     } else {
-      setTimeout(fire, 60);          // let cancel() settle first
+      fire();                        // straight away, inside the gesture
     }
   }, [pickVoice, splitForSpeech, voicePref]);
 
