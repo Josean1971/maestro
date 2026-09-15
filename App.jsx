@@ -489,7 +489,7 @@ function useSpeech() {
     if (!synth) { alert("Este navegador no puede leer en voz alta."); return; }
 
     const parts = splitForSpeech(text);
-    if (!parts.length) return;
+    if (!parts.length) { alert("No hay texto que leer en esta guía."); return; }
     const lang = langTag || "es-ES";
 
     // Only clear the queue when something is actually playing. Calling
@@ -545,15 +545,26 @@ function useSpeech() {
         synth.speak(utt);
       });
 
-      // Nothing was accepted: usually the engine is still waking up, or the
-      // device has no speech data installed at all.
+      // If nothing is playing a second later, say so plainly instead of
+      // failing in silence: guessing at this from the outside is hopeless.
       setTimeout(() => {
         if (!synth.speaking && !synth.pending) {
           setSpeaking(false);
           unduck();
           try { window.__maestroSpeaking = false; } catch(e) {}
+          const why = (typeof window!=="undefined" && window.__maestroVoiceError) || null;
+          const n = (synth.getVoices()||[]).length;
+          alert(
+            "La lectura no llegó a sonar.\n\n"+
+            "Voces disponibles: "+n+"\n"+
+            "Idioma pedido: "+(useLang||"(por defecto)")+"\n"+
+            "Voz elegida: "+(voice?voice.name:"ninguna")+"\n"+
+            (why?("Error del motor: "+why+"\n"):"")+
+            "\nSi las voces son 0, instala los datos de voz desde los ajustes "+
+            "de Android, en Texto a voz."
+          );
         }
-      }, 900);
+      }, 1000);
     };
 
     // Voices arrive asynchronously on Android; speaking before they load picks
