@@ -61,6 +61,48 @@ function pixelRatio(){
 
 // Turns a guide into a script that sounds like someone explaining it, rather
 // than a list being read out. Punctuation carries the pauses.
+
+// ---------------------------------------------------------------------------
+// Voice commands. Recognition rarely returns the exact word, so each command
+// carries several ways of saying it and matching is loose: accents stripped,
+// and a phrase counts if the command appears anywhere in it.
+// ---------------------------------------------------------------------------
+const VOICE_COMMANDS={
+  next:    ["siguiente","continua","continuar","adelante","sigue","paso siguiente","otro","avanza","próximo","proximo"],
+  prev:    ["anterior","atras","atrás","vuelve","retrocede","paso anterior","para atras","para atrás"],
+  repeat:  ["repite","repetir","otra vez","de nuevo","vuelve a leer","repiteme","repíteme"],
+  read:    ["lee","leer","lee la guia","lee la guía","leeme","léeme","lectura","leer todo"],
+  stop:    ["para","parar","alto","silencio","calla","detente","basta","stop"],
+  doneStep:["hecho","listo","completado","terminado","ya esta","ya está","marcado","check"],
+  undo:    ["desmarca","desmarcar","quitar","no esta hecho","no está hecho","deshacer"],
+  home:    ["inicio","volver al inicio","menu","menú","principal","salir"],
+  tools:   ["herramientas","que necesito","qué necesito","materiales"],
+  warning: ["advertencia","aviso","peligro","precaucion","precaución"],
+  help:    ["ayuda","que puedo decir","qué puedo decir","comandos","ordenes","órdenes"],
+};
+
+// A question is anything long that is not one of the commands above.
+function matchCommand(phrase){
+  const n=(v)=>String(v||"").toLowerCase().normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"").replace(/[.,;!?¿¡]/g,"").trim();
+  const said=n(phrase);
+  if(!said) return null;
+
+  let best=null;
+  for(const [cmd,words] of Object.entries(VOICE_COMMANDS)){
+    for(const w of words){
+      const nw=n(w);
+      // An exact match wins outright; otherwise the longest contained phrase.
+      if(said===nw) return {cmd,score:100,said:phrase};
+      if(said.includes(nw)&&(!best||nw.length>best.len)) best={cmd,len:nw.length};
+    }
+  }
+  // A short utterance that contains a command word is almost certainly that
+  // command. A long one is more likely a question that happens to include it.
+  if(best && said.split(/\s+/).length<=4) return {cmd:best.cmd,score:70,said:phrase};
+  return null;
+}
+
 function buildNarration(guide){
   if(!guide) return "";
   const bits=[];
@@ -394,6 +436,80 @@ function useSpeech() {
     } catch(e) { setListening(false); }
   }, []);
 
+
+  // ---- hands-free -----------------------------------------------------------
+  // A continuous listener for use with dirty or occupied hands. It is a
+  // separate recogniser from the dictation one: this stays open, restarts
+  // itself, and only reacts to a short list of commands.
+  const hfRef = React.useRef(null);
+  const hfWanted = React.useRef(false);        // whether the user asked for it
+  const [handsFree, setHandsFree] = React.useState(false);
+
+  const startHandsFree = React.useCallback((onCommand, lang) => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Este navegador no reconoce la voz. Prueba con Chrome."); return; }
+    hfWanted.current = true;
+
+    const build = () => {
+      const r = new SR();
+      r.lang = lang || "es-ES";
+      r.continuous = true;          // keep the microphone open
+      r.interimResults = false;
+      r.maxAlternatives = 3;        // accents and noise make one guess fragile
+
+      r.onstart = () => setHandsFree(true);
+
+      r.onresult = (e) => {
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const res = e.results[i];
+          if (!res.isFinal) continue;
+          // Try every alternative: the top guess is often slightly wrong.
+          for (let k = 0; k < res.length; k++) {
+            if (onCommand(res[k].transcript)) break;
+          }
+        }
+      };
+
+      r.onerror = (ev) => {
+        if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+          hfWanted.current = false;
+          setHandsFree(false);
+          alert("Necesito permiso para el micrófono. Actívalo y vuelve a intentarlo.");
+        }
+        // "no-speech" and "aborted" are routine; onend will restart.
+      };
+
+      r.onend = () => {
+        setHandsFree(false);
+        // Browsers close a continuous session after a while, and again after
+        // every silence. Restarting is what makes it feel always-on.
+        if (hfWanted.current) {
+          setTimeout(() => {
+            if (!hfWanted.current) return;
+            try { hfRef.current = build(); hfRef.current.start(); } catch(e) {}
+          }, 350);
+        }
+      };
+      return r;
+    };
+
+    try {
+      if (hfRef.current) { try { hfRef.current.abort(); } catch(e) {} }
+      hfRef.current = build();
+      hfRef.current.start();
+    } catch(e) { setHandsFree(false); }
+  }, []);
+
+  const stopHandsFree = React.useCallback(() => {
+    hfWanted.current = false;
+    if (hfRef.current) { try { hfRef.current.abort(); } catch(e) {} }
+    hfRef.current = null;
+    setHandsFree(false);
+  }, []);
+
+  React.useEffect(() => () => { hfWanted.current = false;
+    if (hfRef.current) { try { hfRef.current.abort(); } catch(e) {} } }, []);
+
   const stopListening = React.useCallback(() => {
     if (recogRef.current) { try { recogRef.current.stop(); } catch(e){} }
     setListening(false);
@@ -497,6 +613,7 @@ function useSpeech() {
 
     const parts = splitForSpeech(text);
     if (!parts.length) { alert("No hay texto que leer en esta guía."); return; }
+
     const lang = langTag || "es-ES";
 
     // Only clear the queue when something is actually playing. Calling
@@ -602,7 +719,8 @@ function useSpeech() {
   }, []);
 
   return { listening, speaking, startListening, stopListening, speak, stopSpeaking,
-           voices, voicePref, setVoicePref };
+           voices, voicePref, setVoicePref,
+           handsFree, startHandsFree, stopHandsFree };
 }
 
 
@@ -3150,7 +3268,8 @@ export default function Maestro(){
   // Shorthand for interface strings, in whatever language the guides are set to.
   const T=React.useCallback((k)=>uiText(guideLang,k),[guideLang]);
   const { listening, speaking, startListening, stopListening, speak, stopSpeaking,
-          voices, voicePref, setVoicePref } = useSpeech();
+          voices, voicePref, setVoicePref,
+          handsFree, startHandsFree, stopHandsFree } = useSpeech();
 
   // Speak the welcome question once on first interaction
   React.useEffect(()=>{
@@ -3525,6 +3644,98 @@ export default function Maestro(){
     setViewHistory(false);
     setScreen("guide");
   };
+
+
+  // ---- hands-free control of the guide -------------------------------------
+  // Keeps its own idea of which step is current, so "next" and "repeat" mean
+  // something without the user having to touch anything.
+  const [voiceStep,setVoiceStep]=useState(0);
+  const voiceStepRef=React.useRef(0);
+  React.useEffect(()=>{voiceStepRef.current=voiceStep;},[voiceStep]);
+
+  const sayStep=React.useCallback((idx)=>{
+    const pasos=guide?.pasos||[];
+    if(!pasos.length) return;
+    const i=Math.max(0,Math.min(pasos.length-1,idx));
+    setVoiceStep(i);
+    const p=pasos[i];
+    const txt=`${T("step")} ${i+1} de ${pasos.length}. ${p.titulo}. ${p.descripcion||""}`
+      +(p.consejo?` ${T("tip")}: ${p.consejo}`:"");
+    speak(txt,langInfo.voice);
+  },[guide,speak,langInfo,T]);
+
+  const handleVoiceCommand=React.useCallback((phrase)=>{
+    const m=matchCommand(phrase);
+    const pasos=guide?.pasos||[];
+
+    if(!m){
+      // Not a command: if it is long enough to be a real question, ask it.
+      const words=String(phrase||"").trim().split(/\s+/).length;
+      if(words>=4&&guide&&!guide.error){
+        setQuestion(phrase);
+        setTimeout(()=>askFollowUp(),80);
+        return true;
+      }
+      return false;        // too short and unrecognised: probably noise
+    }
+
+    switch(m.cmd){
+      case "next":   sayStep(voiceStepRef.current+1); return true;
+      case "prev":   sayStep(voiceStepRef.current-1); return true;
+      case "repeat": sayStep(voiceStepRef.current);   return true;
+      case "read":
+        if(guide&&!guide.error) speak(buildNarration(guide),langInfo.voice);
+        return true;
+      case "stop":   stopSpeaking(); return true;
+      case "doneStep":{
+        const i=voiceStepRef.current;
+        if(pasos.length&&!completedSteps.includes(i)) toggleStep(i);
+        speak(`${T("step")} ${i+1} ${T("completed")}.`,langInfo.voice);
+        // move straight on, which is what you want with full hands
+        if(i<pasos.length-1) setTimeout(()=>sayStep(i+1),900);
+        return true;
+      }
+      case "undo":{
+        const i=voiceStepRef.current;
+        if(completedSteps.includes(i)) toggleStep(i);
+        return true;
+      }
+      case "home":   reset(); return true;
+      case "tools":
+        speak((guide?.herramientas?.length
+          ? `${T("tools")}: ${guide.herramientas.join(", ")}`
+          : "Esta guía no indica herramientas."),langInfo.voice);
+        return true;
+      case "warning":
+        speak(guide?.advertencia||"No hay advertencias en esta guía.",langInfo.voice);
+        return true;
+      case "help":
+        speak("Puedes decir: siguiente, anterior, repite, hecho, "
+          +"herramientas, advertencia, para, o inicio. También puedes "
+          +"hacerme una pregunta.",langInfo.voice);
+        return true;
+      default: return false;
+    }
+  },[guide,completedSteps,toggleStep,speak,stopSpeaking,sayStep,reset,langInfo,T,askFollowUp]);
+
+  const toggleHandsFree=React.useCallback(()=>{
+    if(handsFree){
+      stopHandsFree();
+      stopSpeaking();
+    }else{
+      setVoiceStep(0);
+      startHandsFree(handleVoiceCommand,langInfo.voice);
+      speak("Manos libres activado. Di siguiente, repite o hecho. "
+        +"Di ayuda para saber más.",langInfo.voice);
+    }
+  },[handsFree,startHandsFree,stopHandsFree,handleVoiceCommand,langInfo,speak,stopSpeaking]);
+
+  // Leaving the guide turns the microphone off: it should never stay open on
+  // a screen where the commands mean nothing.
+  React.useEffect(()=>{
+    if(screen!=="guide"&&handsFree) stopHandsFree();
+  },[screen,handsFree,stopHandsFree]);
+
 
   const diffColor={Facil:"#57cc99",Moderado:"#f4a261",Dificil:"#ff6b6b",Experto:"#f72585"};
   const accentColor=selectedCategory?.sectionColor||"#c77dff";
@@ -4180,6 +4391,19 @@ export default function Maestro(){
                   <div>
                     <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
                       <h2 style={{fontSize:21,fontWeight:"bold",margin:"0 0 10px",lineHeight:1.3,fontFamily:"Georgia,'Times New Roman',serif",flex:1}}>{guide.titulo}</h2>
+                      {/* Hands-free: the microphone stays open and the guide
+                          answers to spoken commands, for when both hands are
+                          busy with the actual job. */}
+                      <button onClick={toggleHandsFree}
+                        style={{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",
+                                background:handsFree?"rgba(90,72,40,0.30)":"rgba(160,138,90,0.12)",
+                                border:`1px solid ${handsFree?"#5c4a2c":"rgba(120,98,58,0.30)"}`,
+                                borderRadius:4,color:handsFree?"#3b2f1c":"#5f4c2e",fontSize:12,
+                                fontFamily:"Georgia,'Times New Roman',serif",cursor:"pointer",
+                                fontWeight:"600"}}>
+                        {handsFree?"🎙 Manos libres ON":"🙌 Manos libres"}
+                      </button>
+
                       <button onClick={()=>speaking?stopSpeaking():speak(buildNarration(guide),(LANGUAGES.find(l=>l.code===(guide.lang||guideLang))||langInfo).voice)}
                         style={{width:36,height:36,borderRadius:"50%",border:`2px solid ${speaking?"#8a2f18":"rgba(0,180,255,0.3)"}`,background:speaking?"rgba(255,80,80,0.15)":"rgba(0,180,255,0.08)",color:speaking?"#8a2f18":"#3b2f1c",fontSize:18,cursor:"pointer",flexShrink:0}}>
                         {speaking?"⏹":"🔊"}
