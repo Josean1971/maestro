@@ -1857,14 +1857,17 @@ function useViewControl(){
       moved+=Math.abs(dx)+Math.abs(dy);
       // Kept as a running average so one jittery frame cannot define the throw.
       vx=vx*0.7+(dx/dt)*0.3;
-      nudge(dx*0.006,-dy*0.005);
+      // Negated on the horizontal axis: increasing yaw sweeps the near face of
+      // the sphere leftwards, so the raw delta would push it away from the
+      // finger. The vertical axis already follows correctly.
+      nudge(-dx*0.006,-dy*0.005);
     };
     const up=(e)=>{
       if(!dragging) return;
       dragging=false;
       if(e.pointerType!=="touch") el.style.cursor="grab";
       // A flick keeps the sphere turning and lets it coast to a stop.
-      if(Math.abs(vx)>0.08) ref.current.vel=Math.max(-7,Math.min(7,vx*5.5));
+      if(Math.abs(vx)>0.08) ref.current.vel=Math.max(-7,Math.min(7,-vx*5.5));
       // A drag should not also register as a tap on whatever is underneath.
       if(moved>6){ e.preventDefault(); e.stopPropagation(); }
     };
@@ -1875,8 +1878,8 @@ function useViewControl(){
     };
     const key=(e)=>{
       const step=0.12;
-      if(e.key==="ArrowLeft"){nudge(-step,0);e.preventDefault();}
-      else if(e.key==="ArrowRight"){nudge(step,0);e.preventDefault();}
+      if(e.key==="ArrowLeft"){nudge(step,0);e.preventDefault();}
+      else if(e.key==="ArrowRight"){nudge(-step,0);e.preventDefault();}
       else if(e.key==="ArrowUp"){nudge(0,step);e.preventDefault();}
       else if(e.key==="ArrowDown"){nudge(0,-step);e.preventDefault();}
       else if(e.key===" "){toggleSpin();e.preventDefault();}
@@ -1948,9 +1951,9 @@ function ViewPad({onNudge,onToggle,onReverse,onSpeed,onReset,spinning,speed=1,co
                      backdropFilter:"blur(6px)",border:"1px solid "+color+"22"}}>
           <button style={btn} {...hold(()=>onNudge(0,0.07))} title="Arriba">▲</button>
           <div style={{display:"flex",gap:4}}>
-            <button style={btn} {...hold(()=>onNudge(-0.07,0))} title="Izquierda">◀</button>
+            <button style={btn} {...hold(()=>onNudge(0.07,0))} title="Girar hacia la izquierda">◀</button>
             <button style={btn} {...tap(onReset)} title="Centrar">⌾</button>
-            <button style={btn} {...hold(()=>onNudge(0.07,0))} title="Derecha">▶</button>
+            <button style={btn} {...hold(()=>onNudge(-0.07,0))} title="Girar hacia la derecha">▶</button>
           </div>
           <button style={btn} {...hold(()=>onNudge(0,-0.07))} title="Abajo">▼</button>
         </div>
