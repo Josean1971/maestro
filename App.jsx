@@ -2988,7 +2988,7 @@ function LoadingStages({color,category,note}){
   React.useEffect(()=>{
     // Stages advance on a slight curve: the middle ones take longer, which is
     // closer to how the request actually behaves.
-    const delays=[900,2200,3200,2600,4000];
+    const delays=[600,1300,1900,2200,3000];
     let idx=0;
     const next=()=>{
       idx++;
@@ -3403,7 +3403,7 @@ export default function Maestro(){
         // These are the current ones; if every single one is rejected as
         // unavailable, the code below asks the API which models this key can
         // actually use, so the app repairs itself instead of breaking.
-        let GEMINI_MODELS=["gemini-3.7-flash","gemini-3.6-flash","gemini-flash-latest","gemini-3.5-flash","gemini-2.5-flash"];
+        let GEMINI_MODELS=["gemini-flash-latest","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash","gemini-2.5-flash"];
         try{
           const cached=JSON.parse(localStorage.getItem("maestro_gemini_models")||"null");
           if(cached&&Array.isArray(cached.list)&&Date.now()-cached.at<7*24*3600*1000){
@@ -3433,12 +3433,21 @@ export default function Maestro(){
                    contents:[{parts:[
                      ...photos.map(p=>({inlineData:{mimeType:p.media,data:p.data}})),
                      {text:usr}
-                   ]}],generationConfig:{maxOutputTokens:4000}})});
+                   ]}],generationConfig:{maxOutputTokens:4000,thinkingConfig:{thinkingBudget:0}}})});
             }catch(netErr){
               lastErr="Sin respuesta del servidor. Comprueba tu conexión.";
               lastStatus=0; continue;
             }
-            if(res.ok) break outer;
+            if(res.ok){
+              // Remember which model answered, so the next guide goes straight
+              // to it instead of walking the list again.
+              try{
+                const rest=GEMINI_MODELS.filter(x=>x!==m);
+                localStorage.setItem("maestro_gemini_models",
+                  JSON.stringify({at:Date.now(),list:[m,...rest].slice(0,6)}));
+              }catch(e){}
+              break outer;
+            }
             const e=await res.json().catch(()=>({}));
             lastStatus=res.status;
             lastErr=(e&&e.error&&e.error.message)?e.error.message:("Error "+res.status);
@@ -3479,7 +3488,7 @@ export default function Maestro(){
                    contents:[{parts:[
                      ...photos.map(p=>({inlineData:{mimeType:p.media,data:p.data}})),
                      {text:usr}
-                   ]}],generationConfig:{maxOutputTokens:4000}})});
+                   ]}],generationConfig:{maxOutputTokens:4000,thinkingConfig:{thinkingBudget:0}}})});
                   if(res.ok) break;
                   const e2=await res.json().catch(()=>({}));
                   lastStatus=res.status;
@@ -3578,7 +3587,7 @@ export default function Maestro(){
         answer=d.content.map(b=>b.text||"").join("").trim();
       } else {
         if(!apiKeys.gemini) throw new Error("Añade tu clave de Gemini en ⚙️.");
-        let list=["gemini-3.7-flash","gemini-flash-latest","gemini-2.5-flash"];
+        let list=["gemini-flash-latest","gemini-3.7-flash","gemini-2.5-flash"];
         try{
           const c=JSON.parse(localStorage.getItem("maestro_gemini_models")||"null");
           if(c&&Array.isArray(c.list)) list=c.list;
@@ -3591,7 +3600,7 @@ export default function Maestro(){
                contents:[{parts:[
                  ...qPhotos.map(p=>({inlineData:{mimeType:p.media,data:p.data}})),
                  {text:usr}]}],
-               generationConfig:{maxOutputTokens:700}})});
+               generationConfig:{maxOutputTokens:700,thinkingConfig:{thinkingBudget:0}}})});
           if(r.ok) break;
         }
         if(!r||!r.ok) throw new Error("La IA no pudo responder ahora mismo.");
@@ -3741,7 +3750,7 @@ export default function Maestro(){
   const accentColor=selectedCategory?.sectionColor||"#c77dff";
 
   return(
-    <div style={{minHeight:"100vh",maxHeight:"100vh",width:"100vw",overflowX:"hidden",background:screen==="describe"?"linear-gradient(180deg,#050b14 0%,#0a1727 32%,#132a42 66%,#1d3d5c 100%)":(darkMode?"#f0f4f8":"#000"),color:darkMode?"#111":"#eee",fontFamily:"Georgia,serif",position:"relative",overflowX:"hidden"}}>
+    <div style={{minHeight:"100vh",maxHeight:"100vh",width:"100vw",background:screen==="describe"?"linear-gradient(180deg,#050b14 0%,#0a1727 32%,#132a42 66%,#1d3d5c 100%)":(darkMode?"#f0f4f8":"#000"),color:darkMode?"#111":"#eee",fontFamily:"Georgia,serif",position:"relative",overflowX:"hidden"}}>
       {screen!=="describe" && !LOW_MEM && <MatrixRain/>}
       <header className="no-print" style={{position:"sticky",top:0,zIndex:10,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",width:"100%",boxSizing:"border-box",background:"rgba(0,10,0,0.82)",backdropFilter:"blur(14px)",borderBottom:"1px solid rgba(0,255,65,0.15)"}}>
         <button onClick={reset} style={{display:"flex",alignItems:"center",gap:10,background:"none",border:"none",cursor:"pointer",padding:0}}>
