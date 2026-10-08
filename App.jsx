@@ -1335,7 +1335,8 @@ function ColumnFrame({color,children,altarDelay=0}){
                                background:`radial-gradient(ellipse at 50% 46%, ${color}30 0%, transparent 58%)`}}/>
 
       {/* Light seeping from the slab, pulsing like something awake behind it. */}
-      <div aria-hidden style={{position:"absolute",left:"28%",right:"28%",top:"31%",bottom:"18%",
+      <div aria-hidden className="oracle-glow"
+           style={{position:"absolute",
                                pointerEvents:"none",borderRadius:"3px",
                                background:`radial-gradient(ellipse, ${color}22 0%, transparent 72%)`,
                                animation:"oraclePulse 5s ease-in-out infinite",
@@ -1343,14 +1344,16 @@ function ColumnFrame({color,children,altarDelay=0}){
 
       {/* A soft darkening under the text: the slab has carvings and a glow of
           its own, and pale words on top of them were hard to read. */}
-      <div aria-hidden style={{position:"absolute",left:"27%",right:"27%",top:"30%",bottom:"17%",
+      <div aria-hidden className="oracle-back"
+           style={{position:"absolute",
                                pointerEvents:"none",borderRadius:6,
                                background:"radial-gradient(ellipse, rgba(2,10,20,0.62) 0%, rgba(2,10,20,0.34) 62%, transparent 88%)"}}/>
 
       {/* ---- the oracle's writing, on the slab between the centre columns ----
           Percentages match the flat panel in the photograph: it spans roughly
           41-59% across and 36-76% down. */}
-      <div style={{position:"absolute",left:"29%",right:"29%",top:"33%",bottom:"20%",
+      <div className="oracle-zone"
+           style={{position:"absolute",
                    display:"flex",flexDirection:"column",justifyContent:"center",
                    animation:`altarSettle 1.1s cubic-bezier(.2,1.5,.4,1) ${altarDelay}ms both`,
                    transformOrigin:"50% 100%"}}>
@@ -4374,12 +4377,13 @@ export default function Maestro(){
                   here too, but the panel in the photograph is far narrower than
                   the old drawn altar, so they overlapped and spilled out. */}
               <textarea
+                className="oracle-text"
                 style={{width:"100%",height:"100%",background:"transparent",border:"none",
-                        outline:"none",color:"#dfe9f5",fontSize:"clamp(10px, 2.4vw, 14px)",
+                        outline:"none",color:"#eef4fb",
                         padding:0,fontFamily:"Georgia,serif",resize:"none",
-                        boxSizing:"border-box",lineHeight:1.45,overflowY:"auto",
+                        boxSizing:"border-box",overflowY:"auto",
                         textAlign:"center",
-                        textShadow:`0 0 12px ${accentColor}88, 0 1px 3px rgba(0,0,0,.95)`}}
+                        textShadow:`0 0 14px ${accentColor}99, 0 1px 4px rgba(0,0,0,.98)`}}
                 placeholder={T("placeholder")}
                 value={problem} onChange={e=>setProblem(e.target.value)}/>
             </ColumnFrame>
@@ -4811,6 +4815,25 @@ export default function Maestro(){
         @keyframes fadeIn{from{opacity:0;transform:translateY(16px) scale(.985);}to{opacity:1;transform:translateY(0) scale(1);}}
         @keyframes spin{to{transform:rotate(360deg);}}
         @keyframes pulseSoft{0%,100%{opacity:.55;transform:scale(1);}50%{opacity:1;transform:scale(1.14);}}
+        /* ---- the oracle's writing area -------------------------------
+           Positions live here rather than inline so a narrow screen can be
+           given its own: on a phone the slab is only a couple of centimetres
+           across, so the text zone spreads over the columns either side and
+           the dark backing spreads with it to keep the words legible. */
+        .oracle-zone{ left:29%; right:29%; top:33%; bottom:20%; }
+        .oracle-glow{ left:28%; right:28%; top:31%; bottom:18%; }
+        .oracle-back{ left:27%; right:27%; top:30%; bottom:17%; }
+        .oracle-text{
+          font-size:clamp(16px, 3.4vw, 20px);   /* never under 16: iOS zooms */
+          line-height:1.4;
+        }
+        .oracle-text::placeholder{ color:#9fb4cc; opacity:.85; }
+        @media (max-width:640px){
+          .oracle-zone{ left:16%; right:16%; top:27%; bottom:13%; }
+          .oracle-glow{ left:15%; right:15%; top:25%; bottom:11%; }
+          .oracle-back{ left:13%; right:13%; top:23%; bottom:9%;
+                        background:radial-gradient(ellipse, rgba(2,10,20,0.78) 0%, rgba(2,10,20,0.52) 64%, rgba(2,10,20,0.1) 92%) !important; }
+        }
         .maestro-viewport{height:calc(100vh - 150px);height:calc(100dvh - 150px);}
         .maestro-tall{min-height:calc(100vh - 150px);min-height:calc(100dvh - 150px);}
 
