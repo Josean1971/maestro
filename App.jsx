@@ -1780,8 +1780,19 @@ function playJourneySound(duration){
 // state is driven by dragging, the arrow keys and on-screen buttons.
 // ---------------------------------------------------------------------------
 function useViewControl(){
-  const ref=React.useRef({yaw:0,pitch:0,spin:true});
-  const [ui,setUi]=React.useState({spin:true});
+  // `speed` is a signed multiplier: positive turns one way, negative the
+  // other, zero holds still. `vel` is the leftover momentum of a flick, which
+  // decays on its own. Rotation accumulates into `yaw` frame by frame rather
+  // than being derived from elapsed time, so changing speed or direction
+  // mid-turn continues smoothly instead of jumping.
+  const ref=React.useRef({yaw:0,pitch:0,spin:true,speed:1,vel:0,last:1});
+  const [ui,setUi]=React.useState({spin:true,speed:1});
+
+  const sync=React.useCallback(()=>{
+    const v=ref.current;
+    v.spin=v.speed!==0;
+    setUi({spin:v.spin,speed:v.speed});
+  },[]);
 
   const nudge=React.useCallback((dYaw,dPitch)=>{
     const v=ref.current;
@@ -1790,39 +1801,70 @@ function useViewControl(){
     v.pitch=Math.max(-0.85,Math.min(0.85,v.pitch+dPitch));
   },[]);
 
+  // Steps through -2, -1.5 … 1.5, 2. Crossing zero is a real stop, which is
+  // what makes one pair of buttons enough for direction, speed and pause.
+  const changeSpeed=React.useCallback((delta)=>{
+    const v=ref.current;
+    let s=Math.round((v.speed+delta)*2)/2;
+    s=Math.max(-2,Math.min(2,s));
+    v.speed=s;
+    if(s!==0) v.last=s;
+    v.vel=0;                       // an explicit choice overrides a flick
+    sync();
+  },[sync]);
+
   const toggleSpin=React.useCallback(()=>{
-    ref.current.spin=!ref.current.spin;
-    setUi({spin:ref.current.spin});
-  },[]);
+    const v=ref.current;
+    v.speed=v.speed!==0?0:(v.last||1);
+    v.vel=0;
+    sync();
+  },[sync]);
+
+  const reverse=React.useCallback(()=>{
+    const v=ref.current;
+    v.speed=-(v.speed||v.last||1);
+    v.last=v.speed;
+    v.vel=0;
+    sync();
+  },[sync]);
 
   const reset=React.useCallback(()=>{
-    ref.current.yaw=0; ref.current.pitch=0; ref.current.spin=true;
-    setUi({spin:true});
-  },[]);
+    const v=ref.current;
+    v.yaw=0; v.pitch=0; v.speed=1; v.last=1; v.vel=0;
+    sync();
+  },[sync]);
 
-  // Dragging with a mouse, and the arrow keys for remotes and keyboards.
+  // Drag on anything: mouse, pen or finger. On touch the canvas carries
+  // `touchAction:"pan-y"`, so the browser keeps vertical scrolling for itself
+  // and hands us the horizontal movement - which is exactly the split we want.
   const attach=React.useCallback((el)=>{
     if(!el) return;
-    let dragging=false,lastX=0,lastY=0,moved=0;
+    let dragging=false,lastX=0,lastY=0,moved=0,lastT=0,vx=0;
 
     const down=(e)=>{
-      if(e.pointerType==="touch") return;      // touch already has its own feel
-      dragging=true; moved=0;
-      lastX=e.clientX; lastY=e.clientY;
+      dragging=true; moved=0; vx=0;
+      lastX=e.clientX; lastY=e.clientY; lastT=performance.now();
+      ref.current.vel=0;                 // grabbing it stops any drift
       el.setPointerCapture&&el.setPointerCapture(e.pointerId);
-      el.style.cursor="grabbing";
+      if(e.pointerType!=="touch") el.style.cursor="grabbing";
     };
     const move=(e)=>{
       if(!dragging) return;
+      const now=performance.now();
       const dx=e.clientX-lastX, dy=e.clientY-lastY;
-      lastX=e.clientX; lastY=e.clientY;
+      const dt=Math.max(8,now-lastT);
+      lastX=e.clientX; lastY=e.clientY; lastT=now;
       moved+=Math.abs(dx)+Math.abs(dy);
+      // Kept as a running average so one jittery frame cannot define the throw.
+      vx=vx*0.7+(dx/dt)*0.3;
       nudge(dx*0.006,-dy*0.005);
     };
     const up=(e)=>{
       if(!dragging) return;
       dragging=false;
-      el.style.cursor="grab";
+      if(e.pointerType!=="touch") el.style.cursor="grab";
+      // A flick keeps the sphere turning and lets it coast to a stop.
+      if(Math.abs(vx)>0.08) ref.current.vel=Math.max(-7,Math.min(7,vx*5.5));
       // A drag should not also register as a tap on whatever is underneath.
       if(moved>6){ e.preventDefault(); e.stopPropagation(); }
     };
@@ -1838,6 +1880,7 @@ function useViewControl(){
       else if(e.key==="ArrowUp"){nudge(0,step);e.preventDefault();}
       else if(e.key==="ArrowDown"){nudge(0,-step);e.preventDefault();}
       else if(e.key===" "){toggleSpin();e.preventDefault();}
+      else if(e.key==="r"||e.key==="R"){reverse();e.preventDefault();}
     };
 
     el.style.cursor="grab";
@@ -1855,52 +1898,90 @@ function useViewControl(){
       el.removeEventListener("wheel",wheel);
       window.removeEventListener("keydown",key);
     };
-  },[nudge,toggleSpin]);
+  },[nudge,toggleSpin,reverse]);
 
-  return {ref,ui,nudge,toggleSpin,reset,attach};
+  return {ref,ui,nudge,toggleSpin,reverse,changeSpeed,reset,attach};
 }
 
 // The on-screen pad. Only worth showing where there is no touchscreen.
-function ViewPad({onNudge,onToggle,onReset,spinning,color="#00cfff"}){
+function ViewPad({onNudge,onToggle,onReverse,onSpeed,onReset,spinning,speed=1,color="#00cfff"}){
+  const [open,setOpen]=React.useState(false);
   const hasTouch=typeof window!=="undefined"&&
     (("ontouchstart" in window)||navigator.maxTouchPoints>0);
-  if(hasTouch) return null;
 
   const btn={
-    width:30,height:30,borderRadius:6,cursor:"pointer",
-    border:"1px solid "+color+"44",background:"rgba(0,8,20,0.75)",
+    minWidth:34,height:32,borderRadius:6,cursor:"pointer",padding:"0 7px",
+    border:"1px solid "+color+"44",background:"rgba(0,8,20,0.78)",
     color:color,fontFamily:"monospace",fontSize:13,lineHeight:1,
     display:"flex",alignItems:"center",justifyContent:"center",
     transition:"all .2s var(--ease-soft)",
+    WebkitTapHighlightColor:"transparent",
   };
+  // Repeats while held, which is how you nudge the view around by hand.
   const hold=(fn)=>({
     onPointerDown:(e)=>{
-      e.preventDefault(); fn();
-      const id=setInterval(fn,90);            // repeats while held down
-      const stop=()=>{clearInterval(id);window.removeEventListener("pointerup",stop);};
+      e.preventDefault(); e.stopPropagation(); fn();
+      const id=setInterval(fn,90);
+      const stop=()=>{clearInterval(id);window.removeEventListener("pointerup",stop);
+                      window.removeEventListener("pointercancel",stop);};
       window.addEventListener("pointerup",stop);
+      window.addEventListener("pointercancel",stop);
     },
   });
+  const tap=(fn)=>({
+    onPointerDown:(e)=>{ e.preventDefault(); e.stopPropagation(); fn(); },
+  });
+
+  // What the dial currently reads: stopped, or a signed multiplier.
+  const label = speed===0 ? "⏸" : (speed>0?"▶":"◀")+" "+Math.abs(speed).toFixed(1).replace(".0","")+"×";
 
   return(
-    <div style={{position:"absolute",right:14,bottom:14,zIndex:6,
-                 display:"flex",flexDirection:"column",alignItems:"center",gap:4,
-                 background:"rgba(0,5,14,0.55)",padding:8,borderRadius:10,
-                 backdropFilter:"blur(6px)",border:"1px solid "+color+"22"}}>
-      <button style={btn} title="Girar arriba" {...hold(()=>onNudge(0,0.09))}>▲</button>
-      <div style={{display:"flex",gap:4}}>
-        <button style={btn} title="Girar izquierda" {...hold(()=>onNudge(-0.09,0))}>◀</button>
-        <button style={{...btn,background:spinning?color+"22":"rgba(0,8,20,0.75)"}}
-          title={spinning?"Detener rotación":"Reanudar rotación"}
-          onClick={onToggle}>{spinning?"❚❚":"▶"}</button>
-        <button style={btn} title="Girar derecha" {...hold(()=>onNudge(0.09,0))}>▶</button>
+    <div style={{position:"absolute",right:12,bottom:12,zIndex:6,
+                 display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,
+                 pointerEvents:"auto"}}>
+
+      {/* The directional pad is extra on a touch screen, where dragging the
+          sphere directly is quicker, so there it stays folded away. */}
+      {open&&(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,
+                     background:"rgba(0,5,14,0.62)",padding:8,borderRadius:10,
+                     backdropFilter:"blur(6px)",border:"1px solid "+color+"22"}}>
+          <button style={btn} {...hold(()=>onNudge(0,0.07))} title="Arriba">▲</button>
+          <div style={{display:"flex",gap:4}}>
+            <button style={btn} {...hold(()=>onNudge(-0.07,0))} title="Izquierda">◀</button>
+            <button style={btn} {...tap(onReset)} title="Centrar">⌾</button>
+            <button style={btn} {...hold(()=>onNudge(0.07,0))} title="Derecha">▶</button>
+          </div>
+          <button style={btn} {...hold(()=>onNudge(0,-0.07))} title="Abajo">▼</button>
+        </div>
+      )}
+
+      {/* Speed dial. Stepping left through zero is what gives reverse, a real
+          stop and a speed setting from a single pair of buttons. */}
+      <div style={{display:"flex",alignItems:"center",gap:4,
+                   background:"rgba(0,5,14,0.62)",padding:6,borderRadius:10,
+                   backdropFilter:"blur(6px)",border:"1px solid "+color+"22"}}>
+        <button style={btn} {...tap(()=>onSpeed(-0.5))} title="Más despacio o al revés">◀◀</button>
+        <button style={{...btn,minWidth:54,
+                        background:speed===0?color+"22":"rgba(0,8,20,0.78)",
+                        fontWeight:"bold"}}
+                {...tap(onToggle)} title={spinning?"Detener":"Reanudar"}>
+          {label}
+        </button>
+        <button style={btn} {...tap(()=>onSpeed(0.5))} title="Más rápido">▶▶</button>
+        <button style={btn} {...tap(onReverse)} title="Invertir el sentido">⇄</button>
+        <button style={{...btn,opacity:open?1:0.6}}
+                {...tap(()=>setOpen(v=>!v))} title="Controles de vista">
+          {open?"✕":"✥"}
+        </button>
       </div>
-      <button style={btn} title="Girar abajo" {...hold(()=>onNudge(0,-0.09))}>▼</button>
-      <button style={{...btn,width:"100%",height:22,fontSize:9.5,marginTop:2}}
-        title="Volver a la vista inicial" onClick={onReset}>CENTRAR</button>
-      <span style={{fontFamily:"monospace",fontSize:8,color:color+"77",marginTop:2}}>
-        arrastra o ←↑↓→
-      </span>
+
+      {hasTouch&&!open&&(
+        <span style={{fontFamily:"monospace",fontSize:9,color:color+"88",
+                      textShadow:"0 1px 3px rgba(0,0,0,.9)"}}>
+          arrastra para girar
+        </span>
+      )}
     </div>
   );
 }
@@ -2387,9 +2468,15 @@ function StarField({section,color,icon,label,onBack,onSelect}){
       const R=Math.min(W,H)*0.40;
       const FOV=3.0;
       const view=viewRef.current;
-      const rotY=t*0.64*(view.spin?1:0)+view.yaw;
+      // Accumulated rather than derived from `t`: the auto-spin and whatever
+      // momentum a flick left behind both feed the same angle, so speed and
+      // direction can change without the view jumping.
+      view.yaw+=dt*0.64*(view.speed||0)+view.vel*dt;
+      view.vel*=Math.pow(0.1,dt);
+      if(Math.abs(view.vel)<0.02) view.vel=0;
+      const rotY=view.yaw;
       const tiltX=0.40+view.pitch;
-      const wob=view.spin?Math.sin(t*0.8)*0.16:0;
+      const wob=view.speed?Math.sin(t*0.8)*0.16:0;
 
       S.stars.forEach(s=>{
         const cY=Math.cos(rotY),sY=Math.sin(rotY);
@@ -2504,8 +2591,9 @@ function StarField({section,color,icon,label,onBack,onSelect}){
         <span style={{fontFamily:"monospace",fontSize:10,color:"#444",marginLeft:"auto"}}>// TOCA UNA ESTRELLA</span>
       </div>
       <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 28px)",cursor:"pointer",touchAction:"pan-y",display:"block"}}/>
-      <ViewPad onNudge={view.nudge} onToggle={view.toggleSpin} onReset={view.reset}
-               spinning={view.ui.spin} color={color}/>
+      <ViewPad onNudge={view.nudge} onToggle={view.toggleSpin} onReverse={view.reverse}
+               onSpeed={view.changeSpeed} onReset={view.reset}
+               spinning={view.ui.spin} speed={view.ui.speed} color={color}/>
     </div>
   );
 }
@@ -2702,9 +2790,12 @@ function OrbitalHome({onSelect}){
       // sphere can be flicked directly, but with a mouse, a remote or a
       // trackpad there was no way to look around at all.
       const view=viewRef.current;
-      const rotY=t*0.56*(view.spin?1:0)+view.yaw;
+      view.yaw+=dt*0.56*(view.speed||0)+view.vel*dt;
+      view.vel*=Math.pow(0.1,dt);
+      if(Math.abs(view.vel)<0.02) view.vel=0;
+      const rotY=view.yaw;
       const tiltX=0.42+view.pitch;
-      const wob=view.spin?Math.sin(t*0.70)*0.14:0;
+      const wob=view.speed?Math.sin(t*0.70)*0.14:0;
 
       S.orbs.forEach(o=>{
         // Rotate base point around Y axis
@@ -2820,8 +2911,9 @@ function OrbitalHome({onSelect}){
       <p style={{fontFamily:"monospace",fontSize:10,color:"#444",letterSpacing:"0.15em",textAlign:"center",paddingTop:6}}>// {orbitTagline}</p>
       <canvas ref={canvasRef} style={{width:"100%",height:"calc(100% - 24px)",cursor:"pointer",touchAction:"pan-y",display:"block"}}/>
 
-      <ViewPad onNudge={view.nudge} onToggle={view.toggleSpin} onReset={view.reset}
-               spinning={view.ui.spin}/>
+      <ViewPad onNudge={view.nudge} onToggle={view.toggleSpin} onReverse={view.reverse}
+               onSpeed={view.changeSpeed} onReset={view.reset}
+               spinning={view.ui.spin} speed={view.ui.speed}/>
     </div>
   );
 }
