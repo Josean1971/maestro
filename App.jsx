@@ -103,6 +103,100 @@ function matchCommand(phrase){
   return null;
 }
 
+
+// ---------------------------------------------------------------------------
+// Streaming. Waiting for the whole guide before showing anything is what made
+// generation feel slow: the model needs ten to twenty seconds to write a
+// seven-step guide, and none of it was visible until the last word landed.
+// These two helpers let the steps appear as they are written.
+// ---------------------------------------------------------------------------
+
+// Reads a server-sent-event body and reports the text so far. Both providers
+// send JSON on `data:` lines; only the shape of the object differs.
+async function readTextStream(res,onChunk){
+  const pull=(o)=>{
+    if(!o) return "";
+    if(o.delta&&typeof o.delta.text==="string") return o.delta.text;          // Claude
+    const parts=o.candidates&&o.candidates[0]&&o.candidates[0].content
+                &&o.candidates[0].content.parts;                              // Gemini
+    return Array.isArray(parts)?parts.map(p=>p.text||"").join(""):"";
+  };
+  const feed=(block)=>{
+    let out="";
+    for(const line of block.split("\n")){
+      const s=line.trim();
+      if(!s.startsWith("data:")) continue;
+      const payload=s.slice(5).trim();
+      if(!payload||payload==="[DONE]") continue;
+      try{ out+=pull(JSON.parse(payload)); }catch(e){}
+    }
+    return out;
+  };
+
+  let full="";
+  // A browser without a readable body still works: everything arrives at once
+  // and goes through the same parser.
+  if(!res.body||!res.body.getReader){
+    full=feed(await res.text());
+    onChunk(full,true);
+    return full;
+  }
+  const reader=res.body.getReader();
+  const dec=new TextDecoder();
+  let buf="";
+  for(;;){
+    const {done,value}=await reader.read();
+    if(done) break;
+    buf+=dec.decode(value,{stream:true});
+    // Events are separated by a blank line; an unfinished one waits for more.
+    const cut=buf.lastIndexOf("\n\n");
+    if(cut<0) continue;
+    const ready=buf.slice(0,cut);
+    buf=buf.slice(cut+2);
+    const text=feed(ready);
+    if(text){ full+=text; onChunk(full,false); }
+  }
+  if(buf.trim()){ const rest=feed(buf); if(rest) full+=rest; }
+  onChunk(full,true);
+  return full;
+}
+
+// Closes an unfinished JSON object so whatever has arrived can be shown while
+// the rest is still being written. Scans back to a recently closed bracket and
+// shuts the open ones; only a handful of positions are tried, since this runs
+// on every chunk.
+function partialJSON(raw){
+  let t=String(raw||"").replace(/^\s*```(?:json)?/i,"").replace(/```\s*$/,"").trim();
+  const start=t.indexOf("{");
+  if(start<0) return null;
+  t=t.slice(start);
+  try{ return JSON.parse(t); }catch(e){}
+
+  let tried=0;
+  for(let i=t.length;i>0&&tried<8;i--){
+    const ch=t[i-1];
+    if(ch!=="}"&&ch!=="]") continue;
+    tried++;
+    const head=t.slice(0,i);
+    let inStr=false,esc=false;
+    const stack=[];
+    for(let k=0;k<head.length;k++){
+      const c=head[k];
+      if(esc){ esc=false; continue; }
+      if(c==="\\"){ if(inStr) esc=true; continue; }
+      if(c==='"'){ inStr=!inStr; continue; }
+      if(inStr) continue;
+      if(c==="{"||c==="[") stack.push(c);
+      else if(c==="}"||c==="]") stack.pop();
+    }
+    if(inStr) continue;                  // the cut fell inside a string
+    let tail="";
+    for(let k=stack.length-1;k>=0;k--) tail+=(stack[k]==="{"?"}":"]");
+    try{ return JSON.parse(head+tail); }catch(e){}
+  }
+  return null;
+}
+
 function buildNarration(guide){
   if(!guide) return "";
   const bits=[];
@@ -3446,6 +3540,22 @@ export default function Maestro(){
     const usr="Categoria: "+selectedCategory.label+". Consulta: "+problem
       +(photos.length?` El usuario adjunta ${photos.length} foto${photos.length>1?"s":""} del problema: examínala${photos.length>1?"s":""} y basa la guía en lo que se ve.`:"")
       +" Solo JSON.";
+    // Shows the guide as it is written. Repaints when a step completes, and
+    // otherwise no more than twice a second: a 2GB tablet cannot redraw the
+    // whole guide on every chunk.
+    let shownSteps=-1, lastShown=0;
+    const showPartial=(text,done)=>{
+      if(done) return;
+      const p=partialJSON(text);
+      if(!p||!p.titulo) return;
+      const n=Array.isArray(p.pasos)?p.pasos.length:0;
+      const now=Date.now();
+      if(n===shownSteps&&now-lastShown<500) return;
+      shownSteps=n; lastShown=now;
+      setLoading(false);
+      setGuide({...p,streaming:true});
+    };
+
     const parse=(raw)=>{let p=null;try{p=JSON.parse(raw);}catch(e){}if(!p){try{const clean=raw.replace(/^```(?:json)?/i,"").replace(/```$/,"").trim();p=JSON.parse(clean);}catch(e){}}if(!p){try{const m=raw.match(/\{[\s\S]*\}/);if(m)p=JSON.parse(m[0]);}catch(e){}}return p;};
     try{
       let raw="";
@@ -3463,7 +3573,7 @@ export default function Maestro(){
           }
           try{
             res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:h,
-              body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:4000,system:sys,
+              body:JSON.stringify({model:"claude-sonnet-4-5",max_tokens:4000,system:sys,stream:true,
                 messages:[{role:"user",content:
                   photos.length
                     ? [...photos.map(p=>({type:"image",source:{type:"base64",media_type:p.media,data:p.data}})),
@@ -3492,8 +3602,7 @@ export default function Maestro(){
           setGuide({error:true,msg:friendly,retryable:TRANSIENT.includes(lastStatus)||lastStatus===0});
           return;
         }
-        const data=await res.json();
-        raw=data.content.map(b=>b.text||"").join("").trim();
+        raw=(await readTextStream(res,showPartial)).trim();
       } else {
         if(!apiKeys.gemini){setGuide({error:true,msg:"Necesitas una clave gratuita de Gemini para generar guías.",needsKey:true});return;}
         // Model names change over time; try current ones in order until one works.
@@ -3525,7 +3634,7 @@ export default function Maestro(){
               await wait(1200*Math.pow(2,attempt-1));   // 1.2s, then 2.4s
             }
             try{
-              res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+apiKeys.gemini,
+              res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":streamGenerateContent?alt=sse&key="+apiKeys.gemini,
                 {method:"POST",headers:{"Content-Type":"application/json"},
                  body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},
                    contents:[{parts:[
@@ -3580,7 +3689,7 @@ export default function Maestro(){
               if(usable.length){
                 try{localStorage.setItem("maestro_gemini_models",JSON.stringify({at:Date.now(),list:usable.slice(0,6)}));}catch(e){}
                 for(const m of usable.slice(0,3)){
-                  res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+apiKeys.gemini,
+                  res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":streamGenerateContent?alt=sse&key="+apiKeys.gemini,
                     {method:"POST",headers:{"Content-Type":"application/json"},
                      body:JSON.stringify({systemInstruction:{parts:[{text:sys}]},
                    contents:[{parts:[
@@ -3610,11 +3719,19 @@ export default function Maestro(){
           setGuide({error:true,msg:friendly,retryable:lastStatus===503||lastStatus===429||lastStatus===0});
           return;
         }
-        const data=await res.json();
-        raw=(data&&data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text)||"";
+        raw=(await readTextStream(res,showPartial)).trim();
       }
-      const parsed=parse(raw);
+      let parsed=parse(raw);
+      // A stream can be cut short on a patchy connection. Whatever steps did
+      // arrive are worth more than an error message, so they are kept and the
+      // guide simply says it is incomplete.
+      let truncada=false;
+      if(!parsed){
+        const p=partialJSON(raw);
+        if(p&&p.titulo&&Array.isArray(p.pasos)&&p.pasos.length){ parsed=p; truncada=true; }
+      }
       if(!parsed){setGuide({error:true,msg:"Error al parsear respuesta.",raw:raw.slice(0,300)});return;}
+      if(truncada) parsed={...parsed,incompleta:true};
       setGuide(parsed);
       const newEntry={id:Date.now(),category:selectedCategory,problem,guide:parsed,
         date:new Date().toLocaleDateString("es-ES"),ai:aiProvider,lang:guideLang,
@@ -4525,9 +4642,10 @@ export default function Maestro(){
                   </div>
                 </div>
 
+                {!guide.streaming&&
                 <div style={{display:"flex",justifyContent:"flex-end",marginBottom:16}}>
                   <button onClick={()=>window.print()} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,color:"#2f5e2a",fontSize:12,fontFamily:"Georgia,'Times New Roman',serif",cursor:"pointer",fontWeight:"600"}}>🖨 Imprimir / PDF</button>
-                </div>
+                </div>}
 
                 <div style={{height:4,background:"rgba(120,98,58,0.16)",borderRadius:2,marginBottom:24,overflow:"hidden"}}>
                   <div style={{height:"100%",borderRadius:2,transition:"width .55s var(--ease-out)",background:"#584627",width:`${guide.pasos?(completedSteps.length/guide.pasos.length)*100:0}%`}}/>
@@ -4635,6 +4753,39 @@ export default function Maestro(){
 
                 {/* Ask about anything the guide did not cover. Answers are
                     independent of each other, so each request stays small. */}
+                {/* Still arriving: say so, rather than leaving the reader
+                    wondering whether that is the whole guide. */}
+                {guide.incompleta&&(
+                  <div className="no-print"
+                       style={{display:"flex",alignItems:"center",gap:9,marginBottom:20,
+                               padding:"10px 14px",borderRadius:4,
+                               background:"rgba(150,60,30,0.10)",
+                               border:"1px solid rgba(150,60,30,0.30)"}}>
+                    <span style={{fontSize:13}}>⚠️</span>
+                    <span style={{fontSize:12,color:"#8a3a1e",
+                                  fontFamily:"Georgia,'Times New Roman',serif"}}>
+                      La conexión se cortó: esta guía puede estar incompleta.
+                    </span>
+                  </div>
+                )}
+
+                {guide.streaming&&(
+                  <div className="no-print"
+                       style={{display:"flex",alignItems:"center",gap:9,marginBottom:24,
+                               padding:"10px 14px",borderRadius:4,
+                               background:"rgba(160,138,90,0.10)",
+                               border:"1px dashed rgba(120,98,58,0.35)"}}>
+                    <span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",
+                                  background:"#5c4a2c",
+                                  animation:"pulseSoft 1.1s var(--ease-soft) infinite"}}/>
+                    <span style={{fontSize:12,color:"#6b5636",
+                                  fontFamily:"Georgia,'Times New Roman',serif"}}>
+                      El oráculo sigue escribiendo…
+                    </span>
+                  </div>
+                )}
+
+                {!guide.streaming&&
                 <div className="no-print" style={{background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",
                              borderRadius:4,padding:"16px 20px",marginBottom:28}}>
                   <h3 style={{fontSize:13,fontWeight:"bold",color:"#5f4c2e",margin:"0 0 4px",
@@ -4735,7 +4886,7 @@ export default function Maestro(){
                       {asking?T("asking"):T("ask")+" →"}
                     </button>
                   </div>
-                </div>
+                </div>}
 
                 {guide.pasos&&completedSteps.length===guide.pasos.length&&(
                   <div style={{textAlign:"center",background:"rgba(160,138,90,0.12)",border:"1px solid rgba(120,98,58,0.30)",borderRadius:4,padding:"32px 24px"}}>
